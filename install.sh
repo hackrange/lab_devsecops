@@ -99,9 +99,12 @@ elif [ -d "$HR_ROOT/.git" ]; then
     printf '  Updating the lab files in %s...\n' "$HR_ROOT"
     # A lab installed before the repository moved still points at the old
     # address; every update points it at the current one first.
+    # The first install cloned one branch only, so name the branch to track
+    # too, or a moved or renamed branch never gets a remote ref.
     git -C "$HR_ROOT" remote set-url origin "$REPO_URL"
-    git -C "$HR_ROOT" fetch -q origin "$REPO_BRANCH"
-    git -C "$HR_ROOT" checkout -q -B "$REPO_BRANCH" "origin/$REPO_BRANCH"
+    git -C "$HR_ROOT" config remote.origin.fetch "+refs/heads/$REPO_BRANCH:refs/remotes/origin/$REPO_BRANCH"
+    git -C "$HR_ROOT" fetch -q --depth 1 origin "$REPO_BRANCH"
+    git -C "$HR_ROOT" checkout -q -f -B "$REPO_BRANCH" "origin/$REPO_BRANCH"
 else
     printf '  Downloading the lab files to %s...\n' "$HR_ROOT"
     git clone -q --depth 1 -b "$REPO_BRANCH" "$REPO_URL" "$HR_ROOT"

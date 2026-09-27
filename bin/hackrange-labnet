@@ -1,0 +1,95 @@
+#!/bin/sh
+# Bring the lab services' address and names up (or down) on this machine.
+#
+# Run by hackrange-labnet.service at every boot, before Docker, nginx and k3s.
+# The names are re-asserted every time as well as the address, because some
+# Ubuntu images (cloud images with cloud-init's manage_etc_hosts) rewrite
+# /etc/hosts at boot, and a missing labgit.lab takes the CI runner and git
+# down with it.
+#
+#   hackrange-labnet up | down
+#
+# HR_LABNET_TYPE picks the interface type (dummy by default); the project's
+# own container based tests use veth, because they cannot load kernel modules.
+#
+# Author: Tim Rice
+set -eu
+
+IP=10.10.10.70
+TYPE="${HR_LABNET_TYPE:-dummy}"
+MARK='# Hackrange Local Lab'
+
+hosts_line() {
+    grep -qE "^${IP}[[:space:]].*labgit\.lab" /etc/hosts && return 0
+    # Rewritten in place (not sed -i), so the file keeps its owner, mode and
+    # any bind mount on it.
+    kept="$(grep -vE '[[:space:]](labgit|labrepo)\.lab([[:space:]]|$)' /etc/hosts)"
+    printf '%s\n%s labgit.lab labrepo.lab   %s\n' "$kept" "$IP" "$MARK" > /etc/hosts
+}
+
+# The lab's own firewall rules, in a table of their own (inet hackrange_guard),
+# re-made whole at every boot.
+#
+#  - 10.10.10.70 answers only this machine and its containers.  Linux accepts a
+#    packet for any of its addresses on any interface, so without this a
+#    neighbor on the same network could route to 10.10.10.70 through this
+#    machine and reach the lab services that have no login of their own
+#    (Kong's admin API, the student's Kubernetes API).
+#  - k3s's API (6443), kubelet (10250) and VXLAN (8472/udp) do not answer the
+#    network either: this is a one machine cluster.
+#  - The services' loopback ports (behind nginx) answer only root and nginx, so
+#    no other account on the machine, and no web page in a browser on it (DNS
+#    rebinding), can talk to them without nginx's checks.  This chain runs
+#    before Docker rewrites the address, so it sees the port that was asked for.
+guard() {
+    command -v nft >/dev/null 2>&1 || return 0
+    nginx_uid="$(id -u www-data 2>/dev/null || echo 33)"
+    nft -f - <<EOF
+table inet hackrange_guard
+delete table inet hackrange_guard
+table inet hackrange_guard {
+    chain input {
+        type filter hook input priority filter - 5; policy accept;
+        iifname "lo" accept
+        iifname "lab0" accept
+        iifname "docker0" accept
+        iifname "br-*" accept
+        iifname "veth*" accept
+        iifname "cni0" accept
+        iifname "flannel*" accept
+        ip daddr $IP drop
+        tcp dport { 6443, 10250 } drop
+        udp dport 8472 drop
+    }
+    chain output {
+        type filter hook output priority -150; policy accept;
+        ip daddr 127.0.0.1 tcp dport { 12222, 13000, 13390, 14444, 18080, 18081, 18448, 18449, 18450, 18451, 18452 } meta skuid != { 0, $nginx_uid } reject with tcp reset
+    }
+}
+EOF
+}
+
+case "${1:-up}" in
+    up)
+        if ! ip link show lab0 >/dev/null 2>&1; then
+            if [ "$TYPE" = veth ]; then
+                ip link add lab0 type veth peer name lab0p
+                ip link set lab0p up
+            else
+                ip link add lab0 type dummy
+            fi
+        fi
+        ip addr replace "$IP/32" dev lab0
+        ip link set lab0 up
+        hosts_line
+        guard || echo "hackrange-labnet: could not load the lab firewall rules (nft)" >&2
+        ;;
+    down)
+        ip link del lab0 2>/dev/null || true
+        command -v nft >/dev/null 2>&1 && nft delete table inet hackrange_guard 2>/dev/null || true
+        ;;
+    *)
+        echo "usage: hackrange-labnet up|down" >&2
+        exit 2
+        ;;
+esac

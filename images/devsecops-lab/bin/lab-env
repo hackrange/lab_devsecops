@@ -1,0 +1,66 @@
+#!/bin/bash
+# Print this student's lab environment: what is running, where it lives, and the
+# credentials to use.  The lesson has the architecture diagram; this command has
+# today's actual values, because they differ per student and per session.
+#
+# Values arrive as environment variables from the lab broker.  Anything not set
+# simply says so, rather than printing a confident lie.
+# Author: Tim Rice
+set -u
+
+line() { printf '%s\n' "----------------------------------------------------------------------"; }
+# Report the egress policy this lab ACTUALLY has, rather than asserting one.
+# In allowlist mode the broker points the box at a filtering gateway, so the
+# proxy variables are the honest signal.
+egress_mode() { [ -n "${http_proxy:-}${HTTP_PROXY:-}" ] && echo allowlist || echo open; }
+row()  { printf '  %-22s %s\n' "$1" "${2:-(not set for this lab)}"; }
+
+echo
+echo "  YOUR LAB ENVIRONMENT"
+line
+echo "  Workstation (this box)"
+row "user" "$(id -un)"
+row "hostname" "$(hostname)"
+row "expires" "${LAB_EXPIRES:-when the lab is closed or times out}"
+row "work survives in" "git push (this box is disposable)"
+echo
+echo "  Package registry (ForgeRepo)"
+row "url" "${LAB_REGISTRY_URL:-https://labrepo.lab:8443}"
+row "portal login" "${LAB_REGISTRY_USER:-}"
+row "password" "${LAB_REGISTRY_PASSWORD:-}"
+row "npm/pip token" "${LAB_REGISTRY_TOKEN:-}"
+row "npm is set to" "$(npm config get registry 2>/dev/null)"
+row "pip is set to" "$(python3 -m pip config get global.index-url 2>/dev/null || echo '(default)')"
+echo
+echo "  Git server (Forgejo)"
+row "url" "${LAB_GIT_URL:-https://labgit.lab:8444}"
+row "username" "${LAB_GIT_USER:-}"
+row "password" "${LAB_GIT_PASSWORD:-}"
+echo
+echo "  Findings platform (Git Code Review)"
+row "url" "${LAB_SAST_URL:-(not used before Week 4)}"
+row "username" "${LAB_SAST_USER:-}"
+row "password" "${LAB_SAST_PASSWORD:-}"
+row "two step code" "${LAB_SAST_TOTP:+run lab-totp}"
+echo
+echo "  Your Kubernetes cluster"
+row "api" "${LAB_K8S_API:-(not used before Week 3)}"
+row "kubeconfig" "${KUBECONFIG:-$HOME/.kube/config}"
+if [ -r "${KUBECONFIG:-$HOME/.kube/config}" ]; then
+    row "context" "$(kubectl config current-context 2>/dev/null)"
+fi
+echo
+echo "  GitHub (your own account)"
+row "signed in as" "$(gh api user --jq .login 2>/dev/null || echo '(run: gh auth login)')"
+echo
+line
+if [ "$(egress_mode)" = allowlist ]; then
+    echo "  Network: allowlist only.  This box may reach the lab registry, the lab"
+    echo "  git server, your cluster, GitHub, and the Debian package mirrors."
+    echo "  Everything else is blocked, including the rest of the internet."
+else
+    echo "  Network: open.  This box can reach the internet directly, so treat it"
+    echo "  like any internet-connected machine and keep real credentials off it."
+fi
+echo "  Diagram: see the lesson page, or the PDF you can print."
+echo

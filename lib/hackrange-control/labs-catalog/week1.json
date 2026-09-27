@@ -1,0 +1,46 @@
+{"days": [
+ {"day": 1, "week": 1, "title": "Make It Run", "items": [
+  {"id": "repo-two-commits", "text": "A repository named secure-build-lab on the lab Git server with two commits.", "check": "d01_repo", "github": false},
+  {"id": "tests-exit-codes", "text": "Four passing tests and an exit code of 0, and you saw a failing test produce exit code 1.", "check": null, "github": false},
+  {"id": "curl-predictions", "text": "Correct predictions (or at least honest attempts) for the five curl requests.", "check": null, "github": false},
+  {"id": "stack-detective", "text": "Five stack detective answers and at least five planted problems found.", "check": null, "github": false},
+  {"id": "day1-log", "text": "A learning log entry for Day 1, pushed.", "check": "d01_log", "github": false}
+ ]},
+ {"day": 2, "week": 1, "title": "The Reviewed Change", "items": [
+  {"id": "two-merged-prs", "text": "Two merged PRs, each with a description, and you can name the base, head, and commit ID of each.", "check": "d02_merged_prs", "github": true},
+  {"id": "template-codeowners", "text": "A PR template and a CODEOWNERS file in .github/.", "check": "d02_review_files", "github": false},
+  {"id": "ruleset-active", "text": "An active ruleset on main, and the GH013 rejection that proves it works.", "check": "d02_ruleset", "github": true},
+  {"id": "conflict-revert", "text": "One conflict resolved by hand and one commit reverted.", "check": null, "github": false},
+  {"id": "day2-log", "text": "A Day 2 log entry, merged through a pull request.", "check": "d02_log", "github": true},
+  {"id": "mains-match", "text": "git log --oneline -1 on the lab Git server's main matching GitHub's, so tomorrow starts where today ended.", "check": "d02_in_sync", "github": true}
+ ]},
+ {"day": 3, "week": 1, "title": "Green, Red, Green", "items": [
+  {"id": "ci-green-main", "text": "A merged .github/workflows/ci.yml and a green run on main triggered by push.", "check": "d03_ci_green", "github": true},
+  {"id": "red-then-green", "text": "A red run from your deliberately broken test, with the failed step's log read and understood, and the revert that turned it green.", "check": "d03_red_then_green", "github": true},
+  {"id": "required-check-blocks", "text": "The protect-main ruleset requiring a status check, and proof (screenshot or the gh pr merge refusal) that a red PR cannot merge.", "check": "d03_required_check", "github": true},
+  {"id": "reusable-workflow", "text": "A reusable workflow node-test.yml called from ci.yml, with the required check updated to node / test.", "check": "d03_reusable", "github": true},
+  {"id": "gitlab-translation", "text": "A validated GitLab-to-Actions translation in ~/scratch/translated.yml (copy it into your log, since the lab box will vanish).", "check": null, "github": false},
+  {"id": "day3-log", "text": "At least five spot-the-bug findings and your three trust sentences, in a Day 3 log entry merged through a PR.", "check": "d03_log", "github": true},
+  {"id": "mains-match", "text": "git rev-parse main github/main | cut -c1-7 printing the same ID twice, so tomorrow's clone has all of today.", "check": "d03_in_sync", "github": true}
+ ]},
+ {"day": 4, "week": 1, "title": "Stop It Before It Lands", "items": [
+  {"id": "semgrep-rules", "text": ".semgrep/lab.yml with lab-no-eval and lab-exec-taint, and a results table for all eight sample files, including honest false negatives.", "check": "d04_semgrep_rules", "github": false},
+  {"id": "pre-commit-config", "text": ".pre-commit-config.yaml with Gitleaks and Semgrep hooks, and terminal output of both blocking a commit.", "check": "d04_precommit", "github": false},
+  {"id": "platform-token-plugin", "text": "The three curl answers from the findings platform, a token minted with review and rules only, and code --list-extensions --show-versions showing the plugin and its version.", "check": null, "github": false},
+  {"id": "editor-problems-panel", "text": "A screenshot of the editor's Problems panel on scratch/db.js, showing the masked value, and your filled-in prediction table for the four password values.", "check": null, "github": false},
+  {"id": "bypass-caught-by-ci", "text": "Proof that --no-verify bypassed the hook, and the failed CI check plus code scanning annotation that caught it anyway.", "check": "d04_bypass_caught", "github": true},
+  {"id": "sarif-junit", "text": "The five jq answers for your SARIF file, the JUnit counts, and the broken-rule exit code.", "check": null, "github": false},
+  {"id": "sast-required", "text": ".github/workflows/sast.yml merged, and semgrep (repo rules) added as a required check.", "check": "d04_sast_required", "github": true},
+  {"id": "ai-review-matrix", "text": "A graded AI review and a completed platform capability matrix.", "check": null, "github": false},
+  {"id": "day4-log", "text": "A Day 4 log entry, merged through a pull request.", "check": "d04_log", "github": true}
+ ]},
+ {"day": 5, "week": 1, "title": "Lock It in the Vault", "items": [
+  {"id": "gitleaks-config", "text": "A .gitleaks.toml with the lab-synthetic-secret rule and [extend] useDefault = true, and the 1-versus-5 finding counts that prove why both matter.", "check": "d05_gitleaks_config", "github": false},
+  {"id": "deleted-not-gone", "text": "The git show 4e58b92:.env output from a fresh clone, with one sentence on why revoking is the only real fix.", "check": null, "github": false},
+  {"id": "hook-and-bypass", "text": "A hook that blocked a commit, and the --no-verify bypass that shows why the server-side check exists.", "check": null, "github": false},
+  {"id": "secret-scan-required", "text": "A merged secret-scan.yml pull request, and the branch rule that lists secret-scan / gitleaks (pull_request) as a required status check on main.", "check": "d05_secret_scan", "github": false},
+  {"id": "vault-evidence", "text": "Vault evidence: KV version 3 after rollback, a 200 on the CI path, and 403s on prod and on write.", "check": null, "github": false},
+  {"id": "dynamic-iam-user", "text": "A dynamic IAM user created and deleted twice: once by vault lease revoke, once by revoking the job's token.", "check": null, "github": false},
+  {"id": "spot-bug-and-drill", "text": "Spot-the-bug findings split into \"a scanner caught it\" and \"only a human caught it,\" and a completed rotation drill.", "check": "d05_drill", "github": false}
+ ]}
+]}

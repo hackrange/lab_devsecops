@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Day 7 lab fixture: a project that declares an extra plugin repository with
+  its own id (vendor-plugins).  A mirror that only matches "central" does not
+  catch it, so plugin downloads go straight to the vendor's server.
+  Both hosts use the reserved .invalid top-level domain: nothing is ever
+  downloaded, and the build fails on purpose.
+  Author: Tim Rice
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example.lab</groupId>
+  <artifactId>bypass-demo</artifactId>
+  <version>1.0.0</version>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>vendor-plugins</id>
+      <url>https://plugins.vendor.example.invalid/maven/</url>
+    </pluginRepository>
+  </pluginRepositories>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.vendor.example</groupId>
+        <artifactId>shiny-maven-plugin</artifactId>
+        <version>2.0.0</version>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals><goal>shine</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

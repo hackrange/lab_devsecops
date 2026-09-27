@@ -1,0 +1,85 @@
+# Values the student's virtual cluster is created with.
+#
+# The same quota and limits as the hosted course, because the lessons are
+# written against them: Day 13 expects NodePort and LoadBalancer to be refused,
+# and the Week 3 and 4 manifests are sized to fit.  Pod Security Admission on
+# the host namespace (set by lab-vcluster) blocks privileged pods and host
+# mounts, again because the lessons expect it.
+#
+# One thing is deliberately left out: the hosted clusters block traffic to
+# private networks so one student cannot reach another or the lab
+# infrastructure.  A Local Lab has one student on their own machine, so there
+# is nothing to protect and that policy is not applied.
+# Author: Tim Rice
+controlPlane:
+  # The controller manager renews a leader lease every few seconds.  When a
+  # busy machine's disk makes the cluster's datastore slow (Day 18 installs
+  # four Helm charts at once), a missed renewal makes it quit on purpose, and
+  # the whole cluster restarts mid-lesson.  Leader election only matters with
+  # more than one replica; a Local Lab cluster has exactly one.
+  distro:
+    k8s:
+      controllerManager:
+        extraArgs: ["--leader-elect=false"]
+  # A student's cluster reserves what it actually uses.  The default request of
+  # 1Gi of ephemeral storage each is what the scheduler counts, and on this node
+  # that capped the class at about twelve people while the disk sat nearly empty.
+  statefulSet:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+        ephemeral-storage: 256Mi
+      limits:
+        # The chart's default is half a CPU, which is fair on a shared node but
+        # starves a Local Lab's only cluster: while Keycloak or Kong start, the
+        # API server times out, the controller manager exits, and the cluster
+        # restarts mid-lesson ("Unable to connect to the server: EOF", Day 15).
+        # One student, one machine: let it use two.
+        cpu: "2"
+        memory: 2Gi
+        ephemeral-storage: 4Gi
+  proxy:
+    # the students reach this API through the node's address, so sign for it
+    extraSANs:
+      - 10.10.10.70
+      - devsecops-k8s-01
+
+policies:
+  resourceQuota:
+    enabled: true
+    # REQUESTS are the real cap: they are what the scheduler subtracts from the
+    # node, so they decide how many students fit.  LIMITS are accounting only, and
+    # setting them tight was capping a student at five containers total (the
+    # ephemeral-storage limit divided by the 4Gi LimitRange default), of which the
+    # vcluster control plane already used two.  Day 13 could not run.  Measured
+    # truth: the whole Day 13 to 19 stack uses 157m CPU and 2.6Gi of memory while
+    # REQUESTING ten times that, so the requests are what to keep honest.
+    quota:
+      requests.cpu: 2
+      requests.memory: 4Gi
+      requests.storage: "25Gi"
+      requests.ephemeral-storage: 4Gi
+      limits.cpu: 30
+      limits.memory: 16Gi
+      limits.ephemeral-storage: 60Gi
+      services.nodeports: 0
+      services.loadbalancers: 0
+      count/pods: 60
+      count/services: 30
+      count/secrets: 100
+      count/configmaps: 100
+      count/persistentvolumeclaims: 20
+  limitRange:
+    enabled: true
+    # A pod that does not ask for anything gets these.  They are deliberately
+    # small: a lab manifest that needs more should say so explicitly, and every
+    # Week 3 and 4 lab manifest does.
+    default:
+      cpu: 500m
+      memory: 512Mi
+      ephemeral-storage: 1Gi
+    defaultRequest:
+      cpu: 25m
+      memory: 96Mi
+      ephemeral-storage: 128Mi

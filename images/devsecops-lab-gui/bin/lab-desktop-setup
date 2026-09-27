@@ -1,0 +1,82 @@
+#!/bin/bash
+# Login-time fixups for the lab desktop, run inside the Xfce session.
+#
+# Three jobs: show the launcher icons on the desktop, pre-trust those launchers
+# so a double click runs them, and make sure nothing ever blanks or locks the
+# screen.  The lock matters most: the student never types the session password
+# (the broker hands it straight to Guacamole), so a lock screen is a prompt with
+# no answer and a support ticket.
+#
+# Author: Tim Rice
+set -u
+
+# Show launcher and file icons on the desktop (style 2 = file/launcher icons).
+xfconf-query -c xfce4-desktop -p /desktop-icons/style -t int -s 2 --create 2>/dev/null || true
+
+# Paint the desktop a plain dark color instead of leaving it black.
+#
+# xfdesktop keys the backdrop per monitor, and it only paints the node whose
+# name matches the live RandR output.  An xrdp session names its output
+# something the shipped defaults never mention, so with no matching node the
+# desktop comes up black.  Derive the node name from the live output, and set
+# the shipped monitor0..4 names too as a fallback.  No wallpaper image: a solid
+# color needs no file, which keeps this image as small as it can be.
+backdrop() {
+    xfconf-query -c xfce4-desktop -p "$1/image-style" -t int -s 0 --create 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p "$1/color-style" -t int -s 0 --create 2>/dev/null || true
+    xfconf-query -c xfce4-desktop -p "$1/rgba1" \
+        -t double -s 0.106 -t double -s 0.122 -t double -s 0.141 -t double -s 1.0 \
+        --create --force-array 2>/dev/null || true
+}
+outs=""
+for _ in $(seq 1 15); do
+    outs=$(xrandr 2>/dev/null | awk '/ connected/{print $1}')
+    [ -n "$outs" ] && break
+    sleep 1
+done
+for o in $outs; do backdrop "/backdrop/screen0/monitor$o/workspace0"; done
+for i in 0 1 2 3 4; do backdrop "/backdrop/screen0/monitor$i/workspace0"; done
+
+# xfdesktop trusts a .desktop file whose recorded checksum matches its contents;
+# without the record, the first double click raises an "untrusted" prompt.
+for f in "$HOME"/Desktop/*.desktop; do
+    [ -e "$f" ] || continue
+    chmod +x "$f" 2>/dev/null || true
+    sum="$(sha256sum "$f" | awk '{print $1}')"
+    gio set -t string "$f" metadata::xfce-exe-checksum "$sum" 2>/dev/null || true
+done
+
+# No blanking, no power management, no lock.
+xset s off -dpms s noblank 2>/dev/null || true
+xfconf-query -c xfce4-screensaver -p /saver/enabled -t bool -s false --create 2>/dev/null || true
+xfconf-query -c xfce4-screensaver -p /lock/enabled  -t bool -s false --create 2>/dev/null || true
+xfconf-query -c xfce4-session -p /shutdown/LockScreen -t bool -s false --create 2>/dev/null || true
+xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -t bool -s false --create 2>/dev/null || true
+
+# Xfce Terminal defaults that suit a remote desktop: a readable size, and no
+# scrollback limit, so a long scanner run can still be read back.
+mkdir -p "$HOME/.config/xfce4/terminal"
+[ -f "$HOME/.config/xfce4/terminal/terminalrc" ] || printf '%s\n' \
+    '[Configuration]' \
+    'FontName=Monospace 11' \
+    'MiscDefaultGeometry=110x32' \
+    'ScrollingUnlimited=TRUE' \
+    'MiscMenubarDefault=TRUE' \
+    'MiscShowUnsafePasteDialog=FALSE' \
+    'CommandLoginShell=TRUE' \
+    > "$HOME/.config/xfce4/terminal/terminalrc"
+
+# CommandLoginShell above is not a preference, it is what makes this desktop
+# behave like the SSH lab.  The session's own values (the git server, the
+# registry, the cluster, the tokens) are written to /etc/profile.d, which only a
+# LOGIN shell reads.  SSH gives one; a terminal opened from a desktop does not,
+# so without this every lesson's first command expanded $LAB_GIT_URL to nothing
+# and cloned from "//secure-build-lab".
+
+# Restart xfdesktop last.  A reload is not enough: it will not repaint a
+# backdrop node that did not exist when it first started, and it has just been
+# given one named after this session's output.  The replacement is detached from
+# this autostart so it outlives the script.
+pkill -x xfdesktop 2>/dev/null
+sleep 1
+setsid xfdesktop >/dev/null 2>&1 &

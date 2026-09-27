@@ -1,0 +1,55 @@
+#!/bin/bash
+# Replay a Falco capture file through Falco, the way the Day 15 lab needs it.
+#
+# Falco cannot run live in the student's cluster (Pod Security Admission blocks
+# the privileges a syscall agent needs), so Day 15 has you write and tune rules
+# against a recorded incident, ~/fixtures/day15/incident.scap.  Driving that by
+# hand means a mouthful of -o flags (replay engine, capture path, the container
+# plugin); this wraps it.
+#
+#   falco-replay                      # stock rules vs the incident capture
+#   falco-replay myrule.yaml          # ADD your rule file to the stock rules
+#   falco-replay -r myrule.yaml       # use ONLY your rule file (no stock rules)
+#   falco-replay --only myrule.yaml   # same as -r
+#   CAPTURE=/path/other.scap falco-replay ...   # a different capture file
+#
+# Anything after the recognised flags is passed straight through to falco, so
+# you can add e.g.  -o json_output=true  to get JSON for jq.
+# Author: Tim Rice
+set -euo pipefail
+
+CAPTURE="${CAPTURE:-$HOME/fixtures/day15/incident.scap}"
+STOCK_RULES=/etc/falco/falco_rules.yaml
+
+rules=()          # extra rule files to load alongside the stock rules
+only=0            # 1 = load ONLY the user's rules, not the stock set
+passthrough=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --only)      only=1; shift; rules+=(-r "$1"); shift ;;
+        -r)          only=1; shift; rules+=(-r "$1"); shift ;;
+        -o|--option) passthrough+=("$1" "$2"); shift 2 ;;
+        *.yaml|*.yml) rules+=(-r "$1"); shift ;;
+        *)           passthrough+=("$1"); shift ;;
+    esac
+done
+
+if [ ! -f "$CAPTURE" ]; then
+    echo "falco-replay: capture file not found: $CAPTURE" >&2
+    exit 1
+fi
+
+# When the caller adds their own rules but did not ask for --only, keep the
+# stock ruleset loaded too so custom rules run next to the built-in detections.
+if [ "$only" -eq 0 ] && [ "${#rules[@]}" -gt 0 ]; then
+    rules=(-r "$STOCK_RULES" "${rules[@]}")
+fi
+
+# The container plugin loads from /etc/falco/config.d; engine.kind=replay needs
+# no driver and no privileges, so this runs fine as the unprivileged student.
+exec falco \
+    -o engine.kind=replay \
+    -o "engine.replay.capture_file=$CAPTURE" \
+    "${rules[@]}" \
+    "${passthrough[@]}"

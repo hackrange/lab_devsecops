@@ -1,0 +1,351 @@
+{
+ "days": [
+  {
+   "day": 11,
+   "week": 3,
+   "title": "Terraform the Network Safely",
+   "items": [
+    {
+     "id": "plan-open-ssh",
+     "text": "A plan showing 0.0.0.0/0 on port 22, and the apply that built it anyway.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "state-secret-gitignore",
+     "text": "The jq output showing a secret in terraform.tfstate, and a .gitignore that keeps state out of Git.",
+     "check": "d11_state_ignored",
+     "github": false
+    },
+    {
+     "id": "checkov-gate",
+     "text": "Checkov's first run (25 failed checks) and your gate passing with one justified suppression.",
+     "check": "d11_checkov_gate",
+     "github": false
+    },
+    {
+     "id": "house-rule",
+     "text": "Your CKV2_SBL_1 policy failing, then passing.",
+     "check": "d11_house_rule",
+     "github": false
+    },
+    {
+     "id": "plan-scan-trivy",
+     "text": "A plan-time scan that caught what the static scan missed, and Trivy's second opinion.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "module-refactor",
+     "text": "The module refactor plan with and without moved blocks, and the validation error for 0.0.0.0/0.",
+     "check": "d11_module_refactor",
+     "github": false
+    },
+    {
+     "id": "drift-exit-codes",
+     "text": "The drift plan with exit code 2, and a clean exit 0 after the fix.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "gate-rehearsal",
+     "text": "The gate rehearsed locally in the job's own order (fmt, validate, Checkov, SARIF) with exit 0, and the same gate failing at exit 1 when admin_cidr is widened.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "infra-pr",
+     "text": "A pull request on the lab Git server carrying the infrastructure code and the workflow, and your Azure review table.",
+     "check": "d11_infra_pr",
+     "github": false
+    },
+    {
+     "id": "learning-log",
+     "text": "A merged learning log entry for Day 11.",
+     "check": "d11_log",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 12,
+   "week": 3,
+   "title": "Bake It and Prove It",
+   "items": [
+    {
+     "id": "inspec-before-after",
+     "text": "An InSpec run with failures and a skip before hardening, and a JSON report with 5 passed controls after.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "playbook-idempotent",
+     "text": "Two playbook runs: changed=5, then changed=0.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "drift-repaired",
+     "text": "A drift you caused with sed, shown by --check --diff and repaired by a rerun.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "validate-refusal",
+     "text": "A failed to validate error that kept a broken SSH config off the machine.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "packer-template",
+     "text": "golden.pkr.hcl that passes packer fmt -check and packer validate, plus docs/golden-image-pipeline.md.",
+     "check": "d12_packer",
+     "github": false
+    },
+    {
+     "id": "threat-model",
+     "text": "docs/threat-model.md with a DFD and five abuse cases, each with prevention, detection, recovery, and residual risk.",
+     "check": "d12_threat_model",
+     "github": false
+    },
+    {
+     "id": "security-requirements",
+     "text": "docs/security-requirements.md with the matrix, owners, an expiring accepted risk, five verified ASVS 5.0.0 requirements, and SR-06 with its todo test.",
+     "check": "d12_requirements",
+     "github": false
+    },
+    {
+     "id": "log-pr",
+     "text": "A pull request on the lab Git server carrying your learning-log entry.",
+     "check": "d12_log_pr",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 13,
+   "week": 3,
+   "title": "First Contact",
+   "items": [
+    {
+     "id": "cluster-admin",
+     "text": "Your cluster's version and node, and the kubectl auth can-i --list line showing you are administrator inside it.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "bare-pod-vs-deployment",
+     "text": "A bare pod that stayed deleted, and a Deployment's pod that came back in seconds with a new name.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "ownership-chain",
+     "text": "The ownership chain: pod owned by ReplicaSet, ReplicaSet owned by Deployment.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "port-forward-nodeport",
+     "text": "A curl through port-forward returning {\"status\":\"ok\"}, and the NodePort refusal from the quota.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "limitrange-quota",
+     "text": "The Pending pod's events showing the LimitRange's 512Mi default and then the ResourceQuota's requests.memory=4Gi ceiling, and all four pods running once you named your own numbers.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "psa-refusals",
+     "text": "The two Pod Security Admission refusals (privileged and hostPath), found in the events and nowhere else.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "secret-plaintext",
+     "text": "Your registry token printed in plain text out of a Kubernetes Secret.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "sa-token",
+     "text": "The service account token's decoded sub, and kubectl auth can-i get secrets --as=... answering no.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "patch-drift",
+     "text": "The kubectl diff that showed nothing after your kubectl patch (the file never knew about it), and the file fixed so it names the ServiceAccount itself.",
+     "check": "d13_drift_fixed",
+     "github": false
+    },
+    {
+     "id": "overlays",
+     "text": "The four-line difference between your dev and stage overlays, and five pods across three namespaces.",
+     "check": "d13_overlays",
+     "github": false
+    },
+    {
+     "id": "helm-kube-linter",
+     "text": "helm history showing three revisions after a rollback, and kube-linter going from three findings to one.",
+     "check": "d13_chart_lint",
+     "github": false
+    },
+    {
+     "id": "pr-and-log",
+     "text": "A pull request on the lab Git server carrying k8s/ and charts/, and a merged learning log entry.",
+     "check": "d13_pr_and_log",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 14,
+   "week": 3,
+   "title": "Least Privilege",
+   "items": [
+    {
+     "id": "whoami-masters",
+     "text": "kubectl auth whoami showing system:masters, and can-i create clusterroles answering yes.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "dev-deployer-cani",
+     "text": "The can-i --list for dev-deployer, with get pods = yes and get secrets = no.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "projected-token",
+     "text": "A decoded projected token, and the expiry mismatch (3607 requested versus a multi-year exp).",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "ci-runner-secret",
+     "text": "The over-privileged ci-runner reading db-credentials, and the fake password in plain text.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "builder-escalation",
+     "text": "The builder escalation: can-i get secrets = no, then the harvested Secret from the harvester pod's logs.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "bind-trap",
+     "text": "The bind trap: the refusal without bind, then the successful self-promotion and can-i get secrets flipping to yes.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "privileged-pending",
+     "text": "A privileged pod stuck Pending, with the PodSecurity reason found only in kubectl get events.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "sts-token-oidc",
+     "text": "The audience-scoped token (aud: sts.amazonaws.com) and the cluster's OIDC discovery document.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "ci-runner-tightened",
+     "text": "The tightened ci-runner: get secrets/db-credentials = yes, list secrets = no.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "learning-log",
+     "text": "A merged learning-log entry for Day 14 on the lab Git server.",
+     "check": "d14_log",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 15,
+   "week": 3,
+   "title": "The Bouncer at the Door",
+   "items": [
+    {
+     "id": "admission-chain",
+     "text": "The empty admission chain at Stop 1, and the same two commands after Gatekeeper was installed.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "baseline-warning",
+     "text": "The Warning: would violate PodSecurity \"baseline:latest\" line, the created that followed it, and the Pending pod with the host's matching event.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "enforce-refusals",
+     "text": "The enforce=baseline refusal at the terminal, and the four-complaint restricted refusal of an ordinary pod.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "hardened-pod",
+     "text": "Your hardened pod Running, with id showing uid=10001 and touch /nope refused as read only.",
+     "check": "d15_hardened_pod",
+     "github": false
+    },
+    {
+     "id": "server-dry-run",
+     "text": "The --dry-run=server output naming the legacy pods and ending in (server dry run).",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "oomkilled",
+     "text": "OOMKilled with exit code 137, and the log that stops after allocating.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "cel-policy",
+     "text": "The CEL policy denying, the same policy only warning, and the typo version's status.typeChecking warning next to the error it caused for a brand new pod.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "gatekeeper",
+     "text": "Gatekeeper's failurePolicy=Ignore, the :latest refusal quoting your own message, and the dryrun audit finding the pod that was already running.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "kyverno",
+     "text": "The Kyverno output showing the injected seccompProfile and then the validation failure, with pass: 1, fail: 1.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "falco-stock",
+     "text": "The stock Falco replay (Events detected: 11, five rules), and the JSON breakdown separating the implant from the three CI binaries.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "falco-tuned-rules",
+     "text": "Your sloppy rule's four alerts, your tuned rule's one, the --validate refusal of the broken rule, and your authorized_keys rule firing.",
+     "check": "d15_falco_rules",
+     "github": false
+    },
+    {
+     "id": "learning-log",
+     "text": "A merged learning-log entry for Day 15.",
+     "check": "d15_log",
+     "github": false
+    }
+   ]
+  }
+ ]
+}

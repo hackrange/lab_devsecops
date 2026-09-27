@@ -1,0 +1,21 @@
+# Give this machine the lab services' address, 10.10.10.70, on a private
+# interface of its own.  Nothing outside the machine can reach it; the machine,
+# its containers and its Kubernetes pods all can, which is exactly the set of
+# things that talk to the lab services.
+#
+# Author: Tim Rice
+[Unit]
+Description=Hackrange Local Lab network address and names (10.10.10.70 on lab0)
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=network-pre.target docker.service nginx.service k3s.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/hackrange-labnet up
+ExecStop=/usr/local/sbin/hackrange-labnet down
+
+[Install]
+WantedBy=multi-user.target

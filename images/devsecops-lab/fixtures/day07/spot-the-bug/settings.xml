@@ -1,0 +1,31 @@
+<!-- Day 7 spot-the-bug fixture: a build server's ~/.m2/settings.xml.
+     The endpoint is a placeholder.  Author: Tim Rice -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <mirrors>
+    <mirror>
+      <id>company-firewall</id>
+      <url>https://packages.example.invalid/maven/</url>
+      <mirrorOf>central</mirrorOf>
+    </mirror>
+  </mirrors>
+  <profiles>
+    <profile>
+      <id>extra-repos</id>
+      <repositories>
+        <repository>
+          <id>partner-libs</id>
+          <url>http://partner.example.invalid/maven2/</url>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>vendor-plugins</id>
+          <url>https://plugins.vendor.example.invalid/maven/</url>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+  <activeProfiles>
+    <activeProfile>extra-repos</activeProfile>
+  </activeProfiles>
+</settings>

@@ -1,0 +1,34 @@
+# Forgejo Actions runner for the Local Lab, the same settings as the hosted one.
+#
+# Job containers need three things the defaults do not give them: the names of
+# the lab services (there is no DNS for them), the lab certificate authority so
+# HTTPS to those names verifies, and the same trust for the tools that read
+# their own bundle (Node, git, curl).
+#
+# The CA is mounted as lab-runner-ca.crt, NOT lab-ca.crt, on purpose: Day 5
+# teaches students to write their own copy to
+# /usr/local/share/ca-certificates/lab-ca.crt inside a job, and a read-only
+# mount at that exact path makes that step fail.
+# Author: Tim Rice
+log:
+  level: info
+
+runner:
+  file: /etc/forgejo-runner/.runner
+  capacity: 2
+  timeout: 30m
+  envs:
+    NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/lab-runner-ca.crt
+    GIT_SSL_CAINFO: /usr/local/share/ca-certificates/lab-runner-ca.crt
+    CURL_CA_BUNDLE: /usr/local/share/ca-certificates/lab-runner-ca.crt
+    REQUESTS_CA_BUNDLE: /usr/local/share/ca-certificates/lab-runner-ca.crt
+
+container:
+  network: bridge
+  privileged: false
+  options: "--add-host=labgit.lab:10.10.10.70 --add-host=labrepo.lab:10.10.10.70 -v /etc/forgejo-runner/lab-ca.crt:/usr/local/share/ca-certificates/lab-runner-ca.crt:ro"
+  valid_volumes:
+    - /etc/forgejo-runner/lab-ca.crt
+
+cache:
+  enabled: false

@@ -1,0 +1,32 @@
+# TUNED -- the same idea, made precise.
+#
+# The attacker's implant differs from the CI runner's test binaries not in WHERE
+# it runs (both are /tmp) but in WHAT LAUNCHED it: the implant's grandparent is
+# the web server (httpd), because it came in through a web RCE.  The CI binaries
+# descend from the build runner, never from httpd.  Pinning the ancestor keeps
+# the true positive and drops the false ones.
+#
+# Replay it against the incident and you should get exactly ONE alert -- the
+# implant -- and none of the CI noise:
+#
+#   falco -o engine.kind=replay \
+#         -o engine.replay.capture_file=~/fixtures/day15/incident.scap \
+#         -r rules/tmp-exec-tuned.yaml
+#
+# proc.aname[2] is the grandparent's name (aname[1] is the parent).  In a real
+# environment you would match the actual service account or process, not a demo
+# binary literally named "httpd".
+- rule: Binary Run From Tmp By Web Server
+  desc: A binary under /tmp was executed somewhere beneath the web server -- the RCE path.
+  # spawned_process is the stock macro for (execve,execveat); inlined here so
+  # the file validates on its own with `falco --validate tmp-exec-tuned.yaml`.
+  condition: >
+    evt.type in (execve,execveat)
+    and proc.exepath startswith "/tmp/"
+    and proc.aname[2] = "httpd"
+  output: >
+    Web server ran a binary from /tmp
+    (command=%proc.cmdline exe=%proc.exepath parent=%proc.pname
+     gparent=%proc.aname[2] container=%container.id)
+  priority: CRITICAL
+  tags: [day15, lab]

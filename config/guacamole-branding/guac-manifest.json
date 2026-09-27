@@ -1,0 +1,12 @@
+{
+    "guacamoleVersion" : "1.6.0",
+    "name"             : "HackRange Lab branding",
+    "namespace"        : "hackrange-branding",
+    "css"              : [ "branding.css" ],
+    "translations"     : [ "translations/en.json" ],
+    "resources"        : {
+        "images/logo.png"        : "image/png",
+        "images/favicon-64.png"  : "image/png",
+        "images/favicon-144.png" : "image/png"
+    }
+}

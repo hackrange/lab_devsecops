@@ -1,0 +1,15 @@
+# Keep the web desktop's certificate matching this machine's network
+# addresses, which can change between boots (a new network, a new DHCP lease).
+#
+# Author: Tim Rice
+[Unit]
+Description=Hackrange Local Lab web desktop certificate refresh
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hackrange-access cert
+
+[Install]
+WantedBy=multi-user.target

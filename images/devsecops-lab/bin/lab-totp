@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Print the current two step code for the lab's code review platform.
+
+WHY THIS EXISTS
+
+Git Code Review requires a second factor on every local account, which is the
+right default and a poor fit for a lab: enrolling it means a QR code, a phone,
+an authenticator app, and several minutes spent on a chore that teaches nothing
+about secure delivery.  So the enrolment is done once, when the account is
+made, and the secret travels with the rest of the lab identity.  This prints
+the code that secret is currently good for.
+
+It is deliberately not magic.  A TOTP code is an HMAC of the shared secret and
+the clock, truncated to six digits, and the whole of it is the few lines below.
+A learner who reads this file has learned more about the second factor than one
+who scanned a QR code and trusted it.
+
+Usage:  lab-totp [-w]
+        -w   keep printing, once per second, with the seconds remaining
+
+Author: Tim Rice
+"""
+
+import base64
+import hashlib
+import hmac
+import os
+import struct
+import sys
+import time
+
+
+def code(secret: str, when: float) -> str:
+    """The six digits this secret is good for at this moment."""
+    key = base64.b32decode(secret + "=" * ((8 - len(secret) % 8) % 8))
+    counter = struct.pack(">Q", int(when) // 30)
+    digest = hmac.new(key, counter, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    number = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    return "%06d" % (number % 1000000)
+
+
+def main() -> int:
+    secret = (os.environ.get("LAB_SAST_TOTP") or "").strip().replace(" ", "")
+    if not secret:
+        sys.stderr.write(
+            "No second factor is set up for this lab session.\n"
+            "LAB_SAST_TOTP is empty, so there is nothing to generate a code\n"
+            "from.  Sign in with your password and the platform will walk you\n"
+            "through enrolling one.\n")
+        return 1
+
+    if "-w" in sys.argv[1:]:
+        try:
+            while True:
+                now = time.time()
+                sys.stdout.write("\r  %s   valid for %2d more seconds " %
+                                 (code(secret, now), 30 - int(now) % 30))
+                sys.stdout.flush()
+                time.sleep(1)
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+        return 0
+
+    now = time.time()
+    left = 30 - int(now) % 30
+    print(code(secret, now))
+    if left <= 5 and sys.stderr.isatty():
+        sys.stderr.write("  (that one expires in %d seconds; run it again for the next)\n" % left)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

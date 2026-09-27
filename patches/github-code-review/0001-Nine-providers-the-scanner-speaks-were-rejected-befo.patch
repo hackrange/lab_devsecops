@@ -1,0 +1,98 @@
+From fbb51d82c6f47fe7f744040a8ab2ffc3db3e1bcd Mon Sep 17 00:00:00 2001
+From: Tim Rice <tim.j.rice@hackrange.com>
+Date: Mon, 21 Sep 2026 21:01:02 +0000
+Subject: [PATCH 1/3] Nine providers the scanner speaks were rejected before a
+ scan could start
+
+provider_name() in lib/provider.sh learned azure, assembla, beanstalk,
+codecommit, gcsr, gitea, forgejo, subversion and perforce.  config_validate()
+in lib/config.sh kept the original github|gitlab|bitbucket and never heard
+about any of them.  The web interface offers all of them, the scanner
+implements all of them, and the validator in between refused nine.
+
+config_load() always calls config_validate(), and ghscan calls config_load(),
+so this was not a warning on an edge case: a connection could be created,
+saved, tested and scheduled, and every scan it ever ran died with "provider
+must be one of: github, gitlab, bitbucket".
+
+The list now lives once, in lib/common.sh, with provider_supported() beside it,
+and both callers ask it.  Two copies are what drifted; one cannot.
+---
+ lib/common.sh   | 20 ++++++++++++++++++++
+ lib/config.sh   |  6 ++----
+ lib/provider.sh | 11 ++++++-----
+ 3 files changed, 28 insertions(+), 9 deletions(-)
+
+diff --git a/lib/common.sh b/lib/common.sh
+index 6ed26d5..c689b5a 100644
+--- a/lib/common.sh
++++ b/lib/common.sh
+@@ -7,6 +7,26 @@ set -o pipefail
+ : "${GHSCAN_LOG_LEVEL:=info}"
+ : "${GHSCAN_COLOR:=auto}"
+ 
++# Every provider this scanner speaks, in one place.
++#
++# It lived in two places before, and they drifted: provider_name() learned nine
++# new providers and config_validate() did not, so a connection could be created
++# in the web interface, saved, and then fail EVERY scan with "provider must be
++# one of: github, gitlab, bitbucket".  The web interface offered the provider,
++# the scanner implemented it, and the validator in between rejected it.  One
++# list means the next provider cannot be half added.
++GHSCAN_PROVIDERS="github gitlab bitbucket azure assembla beanstalk codecommit \
++gcsr gitea forgejo subversion perforce"
++
++# Is this a provider we speak?
++provider_supported() {
++  local want="$1" p
++  for p in $GHSCAN_PROVIDERS; do
++    [[ "$p" == "$want" ]] && return 0
++  done
++  return 1
++}
++
+ _ghs_color_on() {
+   case "$GHSCAN_COLOR" in
+     always) return 0 ;;
+diff --git a/lib/config.sh b/lib/config.sh
+index 1cc0d07..169396b 100644
+--- a/lib/config.sh
++++ b/lib/config.sh
+@@ -136,10 +136,8 @@ or turn auto_discover_orgs on to scan everything the credential can reach")
+   fi
+ 
+   local prov; prov=$(cfg '.provider' 'github')
+-  case "$prov" in
+-    github|gitlab|bitbucket) ;;
+-    *) errs+=("provider must be one of: github, gitlab, bitbucket (got '$prov')") ;;
+-  esac
++  provider_supported "$prov" || \
++    errs+=("provider must be one of: ${GHSCAN_PROVIDERS//$'\n'/ } (got '$prov')")
+ 
+   local method; method=$(cfg '.github.auth.method' 'pat')
+   # A GitHub App is a GitHub thing.  Asking for one anywhere else would fail
+diff --git a/lib/provider.sh b/lib/provider.sh
+index 4114978..5a6f283 100644
+--- a/lib/provider.sh
++++ b/lib/provider.sh
+@@ -16,11 +16,12 @@
+ # GitHub, so that is the default rather than an error.
+ provider_name() {
+   local p; p=$(cfg '.provider' 'github')
+-  case "$p" in
+-    github|gitlab|bitbucket|azure|assembla|beanstalk|codecommit|gcsr|\
+-    gitea|forgejo|subversion|perforce) printf '%s' "$p" ;;
+-    *) log_warn "unknown provider '$p', treating it as github"; printf 'github' ;;
+-  esac
++  if provider_supported "$p"; then
++    printf '%s' "$p"
++  else
++    log_warn "unknown provider '$p', treating it as github"
++    printf 'github'
++  fi
+ }
+ 
+ # Does this host keep git history, in a form the credential engines can walk?
+-- 
+2.43.0
+

@@ -1,0 +1,18 @@
+[project]
+name = "pawnshop-api"
+version = "2.3.1"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "sqlalchemy~=2.0",
+  "pydantic>=2",
+  "requests",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

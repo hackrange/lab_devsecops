@@ -1,0 +1,26 @@
+# FIRST ATTEMPT -- too broad on purpose.
+#
+# The instinct after seeing the implant is "alert on anything run out of /tmp".
+# It is valid YAML and it does catch the implant... but replay it against the
+# incident and you also light up on the CI runner's freshly built test binaries,
+# which are perfectly legitimate.  That noise is the lesson: a rule that cannot
+# tell the attacker's /tmp binary from the build system's /tmp binary will be
+# turned off within a day.
+#
+#   falco --validate rules/tmp-exec-sloppy.yaml
+#   falco -o engine.kind=replay \
+#         -o engine.replay.capture_file=~/fixtures/day15/incident.scap \
+#         -r rules/tmp-exec-sloppy.yaml
+#
+# Count the alerts, look at the `gparent` field, then compare with
+# tmp-exec-tuned.yaml.
+- rule: Binary Run From Tmp
+  desc: Flag any program executed out of /tmp.
+  # (spawned_process is the stock macro for this; inlined so the file validates on its own)
+  condition: evt.type in (execve,execveat) and proc.exepath startswith "/tmp/"
+  output: >
+    Program executed from /tmp
+    (command=%proc.cmdline exe=%proc.exepath parent=%proc.pname
+     gparent=%proc.aname[2] container=%container.id)
+  priority: WARNING
+  tags: [day15, lab]

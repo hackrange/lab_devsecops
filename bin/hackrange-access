@@ -1,0 +1,250 @@
+#!/usr/bin/env bash
+# How a student gets into their Local Lab, and the one password that does it.
+#
+#   hackrange-access rotate   make a new password (every new lab session)
+#   hackrange-access cert     refresh the web address's certificate for this
+#                             machine's current network addresses
+#   hackrange-access info     print the web address, SSH command and password
+#
+# One username (student) and one password open all three ways in: the web
+# desktop in a browser, SSH, and Remote Desktop.  The password is replaced
+# every time a lab session is started fresh and on every install, so a
+# password a student pasted somewhere, or a lab they exposed by accident, stops
+# working the next time they start a session.  It is stored readable by root
+# only; the guacamole service reads its own copy.
+#
+# Runs as root (hackrange-lab calls it through sudo).
+#
+# Author: Tim Rice
+set -euo pipefail
+
+HR_ETC=/etc/hackrange
+ACCESS="$HR_ETC/access.env"
+GUAC_DIR="$HR_ETC/guacamole"
+LABTLS=/etc/nginx/labtls
+CA_DIR="$HR_ETC/ca"
+WEB_PORT=8446
+SSH_PORT=2222
+RDP_PORT=13389
+GUAC_GROUP=hackrange-guac   # a system group; the guacamole container is given it (compose group_add)
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+# ---------------------------------------------------------------- addresses
+
+# This machine's address on its network: the one a student's own computer
+# reaches it on.  Empty when the machine has no network.
+primary_ip() { ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1; }
+
+# Every IPv4 address the machine has, except loopback and the lab's own.
+# Docker's and Kubernetes' own bridges are left out: nothing outside this
+# machine can reach them, so naming them would only clutter the certificate.
+all_ips() {
+    ip -4 -o addr show | awk '$2 !~ /^(lo|lab0|docker[0-9]*|br-.*|cni[0-9]*|flannel.*|veth.*|kube.*|vxlan.*)$/ {
+        split($4, a, "/"); print a[1] }'
+}
+
+# Private (home, office, virtual machine) addresses, as opposed to ones on the
+# public internet.  nginx refuses everything else at the door.
+is_private() {
+    case "$1" in
+        10.*|192.168.*|127.*|169.254.*) return 0 ;;
+        172.1[6-9].*|172.2[0-9].*|172.3[01].*) return 0 ;;
+        100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ---------------------------------------------------------------- password
+
+# Four groups of four, from letters and digits that cannot be mistaken for one
+# another (no 0/O, 1/l/I), so a beginner can read it off the screen and type it:
+# about 80 bits, far beyond guessing even if the lab is exposed.
+new_password() {
+    local chars='abcdefghjkmnpqrstuvwxyz23456789' pw='' i
+    for i in $(seq 1 16); do
+        pw+="${chars:$(( $(od -An -N2 -tu2 /dev/urandom) % ${#chars} )):1}"
+        [ $((i % 4)) -eq 0 ] && [ "$i" -lt 16 ] && pw+='-'
+    done
+    printf '%s' "$pw"
+}
+
+password() { sed -n 's/^LAB_ACCESS_PASSWORD=//p' "$ACCESS" 2>/dev/null; }
+
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
+
+rotate() {
+    local pw; pw="$(new_password)"
+    install -d -m 700 "$HR_ETC"
+    ( umask 077; printf '# The lab login password.  Replaced at every new session.\nLAB_ACCESS_PASSWORD=%s\n' "$pw" > "$ACCESS.tmp" )
+    mv "$ACCESS.tmp" "$ACCESS"
+
+    # The web desktop's login, and the Remote Desktop connection it opens.  The
+    # guacamole service notices the change within seconds: no restart.
+    # A dedicated system group, not the image's own group id: on the host that
+    # number is usually a real person's group (the second account made).
+    getent group "$GUAC_GROUP" >/dev/null || groupadd --system "$GUAC_GROUP"
+    install -d -m 750 "$GUAC_DIR"
+    chown root:"$GUAC_GROUP" "$GUAC_DIR"
+    local x; x="$(xml_escape "$pw")"
+    ( umask 027
+      cat > "$GUAC_DIR/user-mapping.xml.tmp" <<EOF
+<user-mapping>
+  <authorize username="student" password="$x">
+    <connection name="Hackrange Lab">
+      <protocol>rdp</protocol>
+      <param name="hostname">hackrange-lab</param>
+      <param name="port">3389</param>
+      <param name="username">student</param>
+      <param name="password">$x</param>
+      <param name="security">any</param>
+      <param name="ignore-cert">true</param>
+      <param name="resize-method">display-update</param>
+      <param name="enable-font-smoothing">true</param>
+      <param name="disable-audio">true</param>
+    </connection>
+  </authorize>
+</user-mapping>
+EOF
+    )
+    chown root:"$GUAC_GROUP" "$GUAC_DIR/user-mapping.xml.tmp"
+    chmod 640 "$GUAC_DIR/user-mapping.xml.tmp"
+    mv "$GUAC_DIR/user-mapping.xml.tmp" "$GUAC_DIR/user-mapping.xml"
+}
+
+# ---------------------------------------------------------------- certificate
+
+# The web desktop's certificate names every address this machine has, so it
+# matches whichever one the student types.  Addresses change (a new network, a
+# new DHCP lease), so this runs at every boot and every session start, and only
+# re-issues when an address is missing.
+cert() {
+    local crt="$LABTLS/lab-access.crt" key="$LABTLS/lab-access.key" ips ip need=0 san
+    ips="$(all_ips)"
+    if [ ! -s "$crt" ] || ! openssl x509 -checkend $((30 * 86400)) -noout -in "$crt" >/dev/null 2>&1; then
+        need=1
+    else
+        for ip in $ips; do
+            is_private "$ip" || continue
+            openssl x509 -noout -ext subjectAltName -in "$crt" 2>/dev/null | grep -q "IP Address:$ip\b" || need=1
+        done
+    fi
+    [ "$need" = 1 ] || return 0
+
+    # Only names and addresses the lab CA may vouch for (its name constraints,
+    # scripts/40-certs.sh): localhost, the machine name the CA was made with,
+    # and private addresses, which are the only ones nginx serves anyway.
+    local host; host="$(hostname -s | tr 'A-Z' 'a-z')"
+    san="DNS:localhost,IP:127.0.0.1"
+    if [ ! -s "$CA_DIR/permitted-host" ] || [ "$(cat "$CA_DIR/permitted-host")" = "$host" ]; then
+        san="$san,DNS:$host"
+    fi
+    for ip in $ips; do is_private "$ip" && san="$san,IP:$ip"; done
+    local tmp; tmp="$(mktemp -d)"
+    printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=%s\n' \
+        "$san" > "$tmp/ext.cnf"
+    openssl req -newkey rsa:2048 -nodes -keyout "$tmp/key" -out "$tmp/csr" \
+        -subj "/O=Hackrange Labs/CN=Hackrange Local Lab ($(hostname -s))" >/dev/null 2>&1
+    openssl x509 -req -in "$tmp/csr" -CA "$CA_DIR/lab-ca.crt" -CAkey "$CA_DIR/lab-ca.key" \
+        -CAcreateserial -CAserial "$CA_DIR/lab-ca.srl" -days 825 -sha256 \
+        -extfile "$tmp/ext.cnf" -out "$tmp/crt" >/dev/null 2>&1
+    install -m 600 "$tmp/key" "$key"
+    install -m 644 "$tmp/crt" "$crt"
+    rm -rf "$tmp"
+    systemctl reload nginx 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------- information
+
+info() {
+    local ip pw
+    ip="$(primary_ip)"
+    pw="$(password)"
+    local b=$'\e[1m' g=$'\e[32m' y=$'\e[33m' o=$'\e[0m'
+    [ -t 1 ] || { b=''; g=''; y=''; o=''; }
+
+    printf '\n%s==================================================================%s\n' "$g$b" "$o"
+    printf '%s  Your Hackrange Local Lab%s\n' "$g$b" "$o"
+    printf '%s==================================================================%s\n\n' "$g$b" "$o"
+
+    if [ -z "$pw" ]; then
+        printf '  No lab password yet.  Start a lab session:  hackrange-lab start\n\n'
+        return
+    fi
+
+    printf '%s  Open the lab in a web browser%s\n' "$b" "$o"
+    if [ -n "$ip" ] && is_private "$ip"; then
+        printf '      From your own computer:   https://%s:%s\n' "$ip" "$WEB_PORT"
+    fi
+    printf '      From this Ubuntu machine: https://127.0.0.1:%s\n\n' "$WEB_PORT"
+
+    printf '%s  Lab control panel%s  (start and stop services, see how hard the lab works)\n' "$b" "$o"
+    if [ -n "$ip" ] && is_private "$ip"; then
+        printf '      From your own computer:   https://%s:%s/control/\n' "$ip" "$WEB_PORT"
+    fi
+    printf '      Inside the lab desktop:   it is the start page of Firefox\n\n'
+
+    printf '%s  Sign in with%s\n' "$b" "$o"
+    printf '      username:  student\n'
+    printf '      password:  %s%s%s\n\n' "$b" "$pw" "$o"
+
+    printf '%s  Connect with SSH%s  (same username and password)\n' "$b" "$o"
+    if [ -n "$ip" ] && is_private "$ip"; then
+        printf '      From your own computer:   ssh -p %s student@%s\n' "$SSH_PORT" "$ip"
+    fi
+    printf '      From this Ubuntu machine: ssh -p %s student@127.0.0.1\n' "$SSH_PORT"
+    printf '      The first time, type  yes  and press Enter.  Nothing shows on the\n'
+    printf '      screen while you type the password; that is normal.\n\n'
+
+    printf '%s  Or any Remote Desktop app%s  (same username and password)\n' "$b" "$o"
+    printf '      address:  %s:%s\n\n' "${ip:-127.0.0.1}" "$RDP_PORT"
+
+    # The lab services, under the names the lessons use inside the lab and on
+    # this machine's own address for the student's own computer.
+    local here="${ip:-127.0.0.1}"
+    is_private "$here" || here=127.0.0.1
+    printf '%s  The lab services%s          inside the lab              from your own computer\n' "$b" "$o"
+    printf '      Git server (Forgejo)  https://labgit.lab:8444     https://%s:8444\n' "$here"
+    printf '      Package registry      https://labrepo.lab:8443    https://%s:8443/admin/\n' "$here"
+    printf '      Code review           https://10.10.10.70:8445    https://%s:8445\n' "$here"
+    printf '      Keycloak              https://10.10.10.70:8448    https://%s:8448\n' "$here"
+    printf '      Kong Manager          https://10.10.10.70:8449    (inside the lab only)\n'
+    printf '      Kong gateway          https://10.10.10.70:8451    https://%s:8451\n' "$here"
+    printf '      Grafana               https://10.10.10.70:8452    https://%s:8452\n' "$here"
+    printf '      Their usernames and passwords:  hackrange-lab env\n\n'
+
+    printf '%s  Good to know%s\n' "$b" "$o"
+    printf '    - The first time, your browser warns that the connection is not\n'
+    printf '      private.  That is because the lab uses its own certificate, which\n'
+    printf '      your browser has not met.  For THIS address only, choose\n'
+    printf '      "Advanced" and then "Continue" (or "Accept the risk").  Never do\n'
+    printf '      that for a bank, email or shopping site.  The README shows how to\n'
+    printf '      make the warning go away for good.\n'
+    printf '    - The lab certificate'"'"'s fingerprint (check it before you trust it):\n'
+    printf '      %s\n' "$(openssl x509 -noout -fingerprint -sha256 -in "$LABTLS/lab-ca.crt" 2>/dev/null | cut -d= -f2)"
+    printf '    - The lessons use names like https://labgit.lab:8444 that only work\n'
+    printf '      INSIDE the lab.  On your own computer, use the addresses above.\n'
+    printf '    - This password changes every time you start a new lab session, and\n'
+    printf '      after every install.  To see the current one again, run:\n'
+    printf '          /opt/hackrange-labs/show_information.sh\n'
+    printf '    - Keep the password to yourself.  Do not post it in a chat, a forum\n'
+    printf '      or a screenshot.  If you think someone saw it, run\n'
+    printf '          hackrange-lab reset\n'
+    printf '      (push your work first) and it is replaced.\n'
+    printf '    - The lab only answers computers on your own private network, never\n'
+    printf '      the internet.  Do not forward these ports on your router.\n'
+
+    if [ -n "$ip" ] && ! is_private "$ip"; then
+        printf '\n%s  Note:%s this machine is directly on the internet (%s).  For your\n' "$y$b" "$o" "$ip"
+        printf '  safety the lab refuses connections from the internet, so open it from\n'
+        printf '  this machine, or reach it through an SSH tunnel (see the README).\n'
+    fi
+    printf '\n'
+}
+
+case "${1:-info}" in
+    rotate) rotate ;;
+    cert)   cert ;;
+    info)   info ;;
+    *) echo "usage: hackrange-access rotate|cert|info" >&2; exit 2 ;;
+esac

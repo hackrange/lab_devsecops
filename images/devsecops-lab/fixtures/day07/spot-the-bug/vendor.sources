@@ -1,0 +1,7 @@
+# Day 7 spot-the-bug fixture: an APT source a vendor's install guide said to add.
+# The host is a placeholder.  Author: Tim Rice
+Types: deb
+URIs: http://apt.vendor.example.invalid/debian
+Suites: stable
+Components: main
+Trusted: yes

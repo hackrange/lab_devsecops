@@ -1,0 +1,11 @@
+# k3s for the Local Lab: one node, and the same choices the hosted lab node made.
+# Traefik is off because no lesson uses it and the lessons reach services with
+# port-forward.  The API certificate also names 10.10.10.70, the address the
+# lab services answer on.
+# Author: Tim Rice
+disable:
+  - traefik
+tls-san:
+  - 10.10.10.70
+  - devsecops-k8s-01
+write-kubeconfig-mode: "0600"

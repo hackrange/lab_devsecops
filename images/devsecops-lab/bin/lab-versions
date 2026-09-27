@@ -1,0 +1,69 @@
+#!/bin/bash
+# Print the version of every tool in the DevSecOps workstation.
+#
+# The lab container has a process limit (a few hundred), so this runs a few
+# probes at a time rather than all of them at once: a fork storm here used to
+# fail with "fork: retry: Resource temporarily unavailable" and told the student
+# nothing.  Each probe still gets a timeout, because a couple of the Python
+# tools take seconds just to import.
+# Author: Tim Rice
+MAXJOBS=4
+
+probe() {
+    local name="$1"; shift
+    command -v "${1}" >/dev/null 2>&1 || { printf '%-13s (not installed)\n' "$name"; return; }
+    local v
+    v=$(timeout 25 "$@" 2>&1 | grep -v '^\s*$' | head -1 | sed 's/\x1b\[[0-9;]*m//g')
+    printf '%-13s %s\n' "$name" "${v:-(no version output)}"
+}
+
+run() {   # keep at most MAXJOBS probes alive at once
+    while [ "$(jobs -rp | wc -l)" -ge "$MAXJOBS" ]; do wait -n 2>/dev/null || sleep 0.2; done
+    probe "$@" &
+}
+
+{
+run git git --version
+run gh gh --version
+run node node --version
+run npm npm --version
+run python3 python3 --version
+run java java -version
+run mvn mvn -v
+run semgrep semgrep --version
+run falco falco --version
+run gitleaks gitleaks version
+run trivy trivy --version
+run syft syft --version
+run grype grype --version
+run cosign sh -c 'cosign version 2>&1 | grep GitVersion'
+run crane crane version
+run opa opa version
+run conftest conftest --version
+run checkov checkov --version
+run hadolint hadolint --version
+run actionlint actionlint -version
+run zizmor zizmor --version
+run check-jsonschema check-jsonschema --version
+run tofu tofu version
+run terraform terraform version
+run packer packer version
+run vault vault version
+run aws aws --version
+run kubectl kubectl version --client
+run helm helm version --short
+run kustomize kustomize version
+run kubeconform kubeconform -v
+run kube-linter kube-linter version
+# netpol-analyzer ships no version command, so this probes that it runs at all
+# and shows what it is for.  The pinned version is in the Dockerfile.
+run netpolicy netpolicy --help
+run kyverno kyverno version
+run ansible ansible --version
+run custodian custodian version
+run prowler prowler --version
+run pre-commit pre-commit --version
+run pip-audit pip-audit --version
+run cinc-auditor cinc-auditor version
+wait
+} | sort

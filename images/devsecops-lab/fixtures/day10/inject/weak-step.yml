@@ -1,0 +1,3 @@
+# The "Say hello" step from ~/fixtures/ci-samples/weak-workflow.yml, on its own.
+name: Say hello
+run: echo "Thanks for the PR titled ${{ github.event.pull_request.title }}"

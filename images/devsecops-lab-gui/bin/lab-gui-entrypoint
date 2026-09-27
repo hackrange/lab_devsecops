@@ -1,0 +1,79 @@
+#!/bin/bash
+# Start the desktop edition of the DevSecOps workstation.
+#
+# All of the lab setup that the terminal image does -- the student's password,
+# the fixtures and the leaky-repo history, the lab hostnames in /etc/hosts, the
+# npm/pip/maven registry configuration, and the LAB-ENVIRONMENT.txt file -- is
+# done by running the base image's own entrypoint rather than repeating it here.
+# That script ends by exec'ing sshd, so it runs in the background and sshd stays
+# up as a side effect, which is a bonus: the same box answers both the terminal
+# lessons and the browser ones.  Running it instead of copying it means the two
+# variants can never drift apart.
+#
+# This script adds the parts that are only true of a desktop: the start page, a
+# clean X state, a system bus, and xrdp in the foreground to hold the container
+# open.
+#
+# Author: Tim Rice
+set -u
+
+# ---- everything the terminal box does, done the same way ------------------
+/usr/local/bin/lab-entrypoint &
+
+# Wait for that prep to finish before the desktop can be logged into.  sshd is
+# the last thing the base entrypoint starts, so a live sshd means the fixtures
+# are laid down and the registry files are written.  The cap is a safety net: a
+# desktop that comes up slightly early beats one that never comes up at all.
+for _ in $(seq 1 60); do
+    pgrep -x sshd >/dev/null 2>&1 && break
+    sleep 0.5
+done
+pgrep -x sshd >/dev/null 2>&1 || echo "lab-gui: base setup did not finish in time; continuing" >&2
+
+# ---- the browser start page, built from this session's own values ----------
+/usr/local/bin/lab-start-page || true
+
+# ---- a clean X and xrdp state ----------------------------------------------
+# This matters more than it looks.  When a lab image is refreshed by committing
+# a running container, the live session's X display lock and xrdp sockets come
+# along with it.  A stale /tmp/.X11-lock names a pid, and in a fresh container
+# that pid number is very likely alive as something unrelated, so X decides the
+# display is already in use and refuses to start, leaving a lab that boots to
+# nothing.
+rm -f /run/xrdp/*.pid /var/run/xrdp/*.pid 2>/dev/null || true
+rm -f /tmp/.X*-lock /tmp/.X11-unix/X* 2>/dev/null || true
+rm -f /run/xrdp/sockdir/sesman.socket /run/xrdp/sockdir/.sesman.socket.lock 2>/dev/null || true
+mkdir -p /run/xrdp /tmp/.X11-unix
+chmod 1777 /tmp/.X11-unix 2>/dev/null || true
+
+# Parts of the Xfce session expect a system bus, and without one the X server
+# retries the connection every ten seconds for the life of the session, filling
+# the log.  Failures are reported rather than swallowed: a missing bus is a real
+# defect in the image, not a condition to live with.
+rm -f /run/dbus/pid 2>/dev/null || true
+mkdir -p /run/dbus
+dbus-uuidgen --ensure >/dev/null 2>&1 || true
+dbus-daemon --system --fork || echo "lab-gui: the system dbus did not start" >&2
+
+# This box HAS a desktop, so undo the base image's stand-in browser.
+#
+# The SSH image points BROWSER at lab-open, which prints "open this on your own
+# computer" because a command line box has nowhere to show a page.  Here there
+# is a real browser, and leaving the stand-in in place would tell a student to
+# go elsewhere while Firefox sat on the taskbar in front of them.  With
+# xdg-utils and xclip installed, `gh auth login` copies the one time code to the
+# clipboard and opens the page itself, which is the whole reason these days run
+# on the desktop.
+for f in /etc/environment /etc/profile.d/lab-identity.sh; do
+    [ -f "$f" ] && sed -i '/lab-open/d' "$f"
+done
+printf 'export BROWSER=/usr/bin/xdg-open\nexport GH_BROWSER=/usr/bin/xdg-open\n' \
+    >> /etc/profile.d/lab-identity.sh
+printf 'BROWSER=/usr/bin/xdg-open\nGH_BROWSER=/usr/bin/xdg-open\n' >> /etc/environment
+
+# The session manager handles the per-user login; it runs in the background.
+/usr/sbin/xrdp-sesman 2>/dev/null || /usr/sbin/xrdp-sesman --daemon 2>/dev/null || true
+sleep 1
+
+# xrdp in the foreground keeps the container alive.
+exec /usr/sbin/xrdp --nodaemon 2>/dev/null || exec /usr/sbin/xrdp -nodaemon

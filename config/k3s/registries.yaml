@@ -1,0 +1,10 @@
+# The lab package registry is where the student's cluster pulls images from,
+# and it is served with this machine's own lab certificate authority, so
+# containerd has to be told to trust it.  No credentials here on purpose: pulls
+# are anonymous unless a workload carries an imagePullSecret, which is what
+# Day 13 teaches.
+# Author: Tim Rice
+configs:
+  "labrepo.lab:8443":
+    tls:
+      ca_file: /etc/nginx/labtls/lab-ca.crt

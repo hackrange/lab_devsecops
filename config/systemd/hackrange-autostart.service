@@ -1,0 +1,18 @@
+# Everything on at boot: the lab services, the student's cluster, and any
+# Week 4 app they stopped.  The Local Lab's default is running.
+# Author: Tim Rice
+[Unit]
+Description=Hackrange Local Lab: start every part of the lab
+After=network-online.target docker.service k3s.service hackrange-labnet.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HR_STUDENT=student01
+# k3s answers before the student's cluster is ready; give it time.
+ExecStartPre=/bin/sleep 30
+ExecStart=/usr/bin/python3 /usr/local/lib/hackrange/control/server.py --start-all
+TimeoutStartSec=20min
+
+[Install]
+WantedBy=multi-user.target

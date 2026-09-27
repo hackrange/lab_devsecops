@@ -1,0 +1,26 @@
+# The Local Lab control panel: status, start and stop, and resource use.
+# Author: Tim Rice
+[Unit]
+Description=Hackrange Local Lab control panel
+After=network-online.target docker.service k3s.service nginx.service
+Wants=network-online.target
+
+[Service]
+Environment=HR_STUDENT=student01
+ExecStart=/usr/bin/python3 /usr/local/lib/hackrange/control/server.py
+Restart=always
+RestartSec=5
+User=root
+# Root, because it starts and stops Docker containers and reads the lab's
+# secret files; fenced in otherwise.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

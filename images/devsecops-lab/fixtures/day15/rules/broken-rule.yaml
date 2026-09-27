@@ -1,0 +1,14 @@
+# A DELIBERATELY BROKEN rule, for the `falco --validate` exercise.
+#
+# Run:   falco --validate broken-rule.yaml
+#
+# Falco should refuse to load it and point at the mistake: `proc.exepathh` is
+# not a real field (the field is `proc.exepath`).  Fix the typo and re-validate
+# until it reports the file as valid -- this is how you check a rule before you
+# ever put it in front of the capture.
+- rule: Tmp Exec (broken)
+  desc: Flag a binary run from /tmp -- but with a typo in the field name.
+  condition: evt.type in (execve,execveat) and proc.exepathh startswith "/tmp/"
+  output: "Program from /tmp (command=%proc.cmdline exe=%proc.exepath)"
+  priority: WARNING
+  tags: [day15, lab]

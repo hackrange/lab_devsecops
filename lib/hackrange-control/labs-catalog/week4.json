@@ -1,0 +1,411 @@
+{
+ "days": [
+  {
+   "day": 16,
+   "week": 4,
+   "title": "Who Goes There",
+   "items": [
+    {
+     "id": "keycloak-rollout",
+     "text": "Keycloak rolling out in your own namespace, with the two timestamps that show how long it took.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "registry-refusal",
+     "text": "The registry refusing an unapproved image, with the not on the whitelist message.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "discovery-document",
+     "text": "The discovery document, showing the token endpoint, the JWKS URI, and S256 support.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "client-config",
+     "text": "Your client's configuration: public, standard flow only, one exact redirect URI, PKCE required.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "decoded-token",
+     "text": "A decoded access token showing customer_id and aud: shopfront-api, and the mappers that put them there.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "pkce-refusals",
+     "text": "The three PKCE refusals: wrong verifier, replayed code, password grant.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "sql-injection-semgrep",
+     "text": "The injected search returning card numbers, and the Semgrep finding that names the line.",
+     "check": "d16_injection_rule",
+     "github": false
+    },
+    {
+     "id": "xss-three-contexts",
+     "text": "The three XSS contexts in one page, before and after.",
+     "check": "d16_xss_fixed",
+     "github": false
+    },
+    {
+     "id": "idor-404-after-fix",
+     "text": "Alice's valid token reading order 1002 with a 200, and the same request answering 404 after the fix.",
+     "check": "d16_idor_fixed",
+     "github": false
+    },
+    {
+     "id": "jwt-attacks-refused",
+     "text": "alg: none and a tampered payload both refused.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "tests-red-then-green",
+     "text": "The test run that was red before the fix and green after it, with the count in both.",
+     "check": "d16_tests",
+     "github": false
+    },
+    {
+     "id": "two-pull-requests",
+     "text": "Two pull requests on the lab Git server: the service with its tests, and your Day 16 log.",
+     "check": "d16_two_prs",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 17,
+   "week": 4,
+   "title": "Guard the Front Door",
+   "items": [
+    {
+     "id": "quota-refusals",
+     "text": "The two quota refusals, with the full message, and the ClusterIP Service that was allowed.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "kong-install",
+     "text": "The chart version and the two --set overrides you installed Kong with, and the four ClusterIP Services it created.",
+     "check": "d17_kong_pinned",
+     "github": false
+    },
+    {
+     "id": "gateway-200-headers",
+     "text": "A 200 through the gateway showing Via: 1.1 kong and both Kong latency headers.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "cors-preflights",
+     "text": "Both CORS preflight answers, showing that the disallowed origin still got a 200.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "rate-limit-429",
+     "text": "The rate limit going from 200 to 429, with the Retry-After header.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "four-token-answers",
+     "text": "Four token answers: no token, good, tampered signature, expired, and what changed when you removed claims_to_verify.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "gateway-programmed",
+     "text": "The Gateway at Programmed=Unknown / Waiting for controller, and the same command after the annotations.",
+     "check": "d17_gateway_programmed",
+     "github": false
+    },
+    {
+     "id": "canary-count",
+     "text": "Your ninety/ten count out of sixty requests, and the count again after setting the weight to zero.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "blue-green-rollout",
+     "text": "The blue/green switch and its rollback, and the twenty 200s during the broken rollout with rollout status exiting 1.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "netpolicy-eval",
+     "text": "The netpolicy eval answers: false, false with the ingress rule, true with the egress rule, and the one-line list.",
+     "check": "d17_netpol",
+     "github": false
+    },
+    {
+     "id": "learning-log",
+     "text": "A merged learning log entry for Day 17.",
+     "check": "d17_log",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 18,
+   "week": 4,
+   "title": "See Everything",
+   "items": [
+    {
+     "id": "logs-then-notfound",
+     "text": "A pod's logs read with kubectl logs, then NotFound after you deleted the pod.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "no-metrics-api",
+     "text": "kubectl top nodes answering error: Metrics API not available, and an empty metrics.k8s.io API group.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "cgroup-memory",
+     "text": "A container's own memory use read out of /sys/fs/cgroup/memory.current.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "collector-two-ports",
+     "text": "The collector's Service showing two ports instead of six, and one receiver in its rendered config.",
+     "check": "d18_collector_hardened",
+     "github": false
+    },
+    {
+     "id": "otlp-by-hand",
+     "text": "HTTP 200 from /v1/logs and /v1/traces, and the collector's debug exporter counting one record and one span.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "loki-query",
+     "text": "Loki's label list (one label, service_name) and your own log line fetched back by query_range.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "tempo-trace-loki-pvc",
+     "text": "A trace fetched from Tempo by its ID, and the Loki PVC at 1Gi rather than the chart's 10Gi.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "tempo-datasource-fixed",
+     "text": "The Tempo datasource health check failing on port 3100, and passing after you fixed the values file.",
+     "check": "d18_tempo_datasource",
+     "github": false
+    },
+    {
+     "id": "events-in-loki",
+     "text": "Kubernetes Events queryable in Loki as {service_name=\"k8s-events\"}, and the collector's ClusterRole limited to events.",
+     "check": "d18_events_feed",
+     "github": false
+    },
+    {
+     "id": "secret-read-unrecorded",
+     "text": "Zero events recording the Secret you read, and /logs answering NotFound.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "notifications",
+     "text": "The test notification showing an empty severity in its title, and the real notification showing severity: critical and \"QUERY\":2.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "alert-lifecycle-cleanup",
+     "text": "The rule going inactive to firing to a resolved notification, and an empty namespace at the end.",
+     "check": null,
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 19,
+   "week": 4,
+   "title": "The Self-Healing Cloud",
+   "items": [
+    {
+     "id": "inherited-account",
+     "text": "The inherited account: three ports open to 0.0.0.0/0 and two buckets with nothing switched on.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "prowler-run",
+     "text": "A Prowler run with your five agreed checks, eight failures, and prowler exit 3.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "framework-mapping",
+     "text": "One finding's framework mapping, and the count of frameworks it carries (36).",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "pci-requirement",
+     "text": "The PCI DSS 4.0 requirement text for 1.3.1, read from the tool.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "gate-fails-closed",
+     "text": "gate.sh failing with five blocking findings, and the reason it exits 2 rather than 0 when the report is missing.",
+     "check": "d19_gate",
+     "github": false
+    },
+    {
+     "id": "custodian-dry-run",
+     "text": "custodian validate passing, and a dry run's resources.json holding exactly one security group.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "remediation-result",
+     "text": "Port 22 gone, port 3389 tagged c7n-close-me with a date, and port 443 untouched.",
+     "check": "d19_guardrails",
+     "github": false
+    },
+    {
+     "id": "stale-cache",
+     "text": "The stale cache reporting count:1 on a deleted rule, and count:0 with --cache-period 0.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "exception-green",
+     "text": "The gate going green only after an exception with a reason, an owner and a review date.",
+     "check": "d19_exception",
+     "github": false
+    },
+    {
+     "id": "event-bus",
+     "text": "Two events published to the bus and exactly one delivered to the queue.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "runbook",
+     "text": "runbook.sh printing CHECK, CHANGE and CONFIRM, and exiting 0 on the confirm step.",
+     "check": "d19_runbook",
+     "github": false
+    },
+    {
+     "id": "platform-tls-401",
+     "text": "The platform's healthz over verified TLS with no -k, and two identical 401s.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "finding-404",
+     "text": "A finding id you were not given answering 404, and your own answering 200.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "token-and-review",
+     "text": "A token's ping showing your scopes, and a review call that finds a secret and stores nothing.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "learning-log",
+     "text": "A merged learning log entry for Day 19.",
+     "check": "d19_log",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 20,
+   "week": 4,
+   "title": "Prove It",
+   "items": [
+    {
+     "id": "release-gate-blocked",
+     "text": "capstone/gate.sh running all seven gates, and the first run answering RELEASE GATE: BLOCKED on your own clean tree.",
+     "check": "d20_gate",
+     "github": false
+    },
+    {
+     "id": "gitleaks-history",
+     "text": "Gitleaks naming three rules on a committed token, and still refusing after the file was deleted in a later commit.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "registry-403",
+     "text": "The registry's 403 ... Reason: blocked by rule event-stream, from both npm install and the gate's npm ci.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "semgrep-exec-taint",
+     "text": "Semgrep's capstone.policy.exec-taint finding, marked Blocking, on the line where a query parameter reached exec().",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "conftest-refusal",
+     "text": "Conftest refusing an unpinned :latest base and USER root, with 3 tests, 1 passed, 2 failures.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "checkov-bastion",
+     "text": "Checkov's CKV_AWS_24 and CKV_AWS_23 on the bastion security group, and ten passing checks on the good one.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "kyverno-and-psa",
+     "text": "Kyverno's pass: 2, fail: 2, and the cluster's own violates PodSecurity \"baseline:latest\" Event after kubectl said created.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "exception-drill",
+     "text": "RELEASE GATE: PASS with EX-001 in place, and both gates refusing again once the expiry date was in the past.",
+     "check": "d20_exception",
+     "github": false
+    },
+    {
+     "id": "merge-405-then-200",
+     "text": "A merge attempt answering HTTP 405 with a secret on the branch, and HTTP 200 once it was gone.",
+     "check": "d20_merge_gate",
+     "github": false
+    },
+    {
+     "id": "broken-rollout",
+     "text": "Ten 200 answers during a broken rollout, rollout status exiting 1, and the reason only in kubectl get events.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "rollback-by-digest",
+     "text": "The rollback naming the previous digest, and the pods' imageID proving which bytes are serving.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "evidence-not-covered",
+     "text": "docs/capstone/evidence.md on main, with a \"Not covered\" section you wrote honestly.",
+     "check": "d20_evidence",
+     "github": false
+    }
+   ]
+  }
+ ]
+}

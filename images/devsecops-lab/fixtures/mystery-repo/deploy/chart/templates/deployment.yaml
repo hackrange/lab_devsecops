@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawnshop
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels: { app: pawnshop }
+  template:
+    metadata:
+      labels: { app: pawnshop }
+    spec:
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports: [{ containerPort: 8000 }]

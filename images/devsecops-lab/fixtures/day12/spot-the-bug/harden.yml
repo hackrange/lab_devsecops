@@ -1,0 +1,28 @@
+---
+# A "hardening" playbook from another team.  It works...  sort of.
+# Run it twice against the scratch directory and read the recap both times:
+#   ansible-playbook -i localhost, -c local spot-the-bug/harden.yml
+# Then find every problem.  Author: Tim Rice
+- name: Harden the build server (scratch copy)
+  hosts: all
+  vars:
+    target: /tmp/spot-the-bug
+    registry_token: LAB_SECRET_registry_token_do_not_bake
+  tasks:
+    - name: Make the scratch config directory
+      ansible.builtin.command: mkdir -p {{ target }}/etc/ssh
+
+    - name: Disable root login
+      ansible.builtin.shell: echo "PermitRootLogin no" >> {{ target }}/etc/ssh/sshd_config
+
+    - name: Set the password age
+      ansible.builtin.shell: echo "PASS_MAX_DAYS 365" >> {{ target }}/etc/login.defs
+
+    - name: Let the image pull from the registry
+      ansible.builtin.copy:
+        dest: "{{ target }}/etc/registry-token"
+        content: "{{ registry_token }}\n"
+        mode: "0644"
+
+    - name: Show what we did
+      ansible.builtin.shell: cat {{ target }}/etc/ssh/sshd_config

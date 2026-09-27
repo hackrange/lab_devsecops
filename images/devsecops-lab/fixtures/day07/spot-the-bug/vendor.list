@@ -1,0 +1,2 @@
+# Day 7 spot-the-bug fixture: the same vendor source in the older one-line format.
+deb [trusted=yes] http://apt.vendor.example.invalid/debian stable main

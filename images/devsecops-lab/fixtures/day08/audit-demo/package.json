@@ -1,0 +1,11 @@
+{
+  "name": "audit-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Day 8 training fixture: deliberately old, known-vulnerable dependency versions. Never deploy.",
+  "dependencies": {
+    "jsonwebtoken": "8.5.1",
+    "lodash": "4.17.20",
+    "mkdirp": "0.5.5"
+  }
+}

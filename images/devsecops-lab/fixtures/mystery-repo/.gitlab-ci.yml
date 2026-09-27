@@ -1,0 +1,23 @@
+stages: [test, build, deploy]
+
+test-api:
+  stage: test
+  image: python:3.12
+  script:
+    - pip install ./api[dev]
+    - cd api && pytest
+
+build-image:
+  stage: build
+  image: docker:27
+  services: [docker:27-dind]
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+deploy-prod:
+  stage: deploy
+  image: alpine/helm:3.15.2
+  script:
+    - helm upgrade --install pawnshop deploy/chart --set image.tag=$CI_COMMIT_SHORT_SHA
+  only: [main]

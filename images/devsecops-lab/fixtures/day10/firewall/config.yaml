@@ -1,0 +1,32 @@
+# A LOCAL STAND-IN for a package firewall / curated repository, for the Day 10
+# test matrix.  Verdaccio is a small open source npm registry proxy.  It is NOT
+# a commercial package firewall (no malware scanning, no policy engine), but it
+# has the three behaviors the matrix tests: it proxies an upstream, it caches
+# what it fetched, and it can refuse named packages.
+#
+# Copy this file to ~/scratch/firewall/ before starting (storage is relative to
+# the config file).  Author: Tim Rice
+storage: ./storage
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    timeout: 10s
+    max_fails: 2
+    fail_timeout: 1m
+packages:
+  # DENY: the 2018 event-stream compromise, and its malicious hitchhiker.
+  # "blocked-by-policy" is not a real user or group, so nobody gets access.
+  'event-stream':
+    access: blocked-by-policy
+    publish: blocked-by-policy
+  'flatmap-stream':
+    access: blocked-by-policy
+    publish: blocked-by-policy
+  # ALLOW everything else, fetched from npmjs through this proxy.
+  '**':
+    access: $all
+    publish: blocked-by-policy
+    proxy: npmjs
+server:
+  keepAliveTimeout: 60
+log: { type: stdout, format: pretty, level: warn }

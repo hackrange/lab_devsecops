@@ -1,0 +1,21 @@
+{
+  "name": "pawnshop-web",
+  "version": "2.3.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "postinstall": "node scripts/fetch-fonts.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vitest": "^2.0.0",
+    "@vitejs/plugin-react": "^4.3.0"
+  }
+}

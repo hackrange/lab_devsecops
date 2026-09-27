@@ -1,0 +1,26 @@
+# Translate this GitLab CI pipeline into a GitHub Actions workflow (Day 3 lab).
+stages: [test, package]
+
+variables:
+  NODE_VERSION: "24"
+
+unit-tests:
+  stage: test
+  image: node:24-bookworm-slim
+  script:
+    - npm ci --ignore-scripts
+    - npm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+package:
+  stage: package
+  image: node:24-bookworm-slim
+  script:
+    - npm pack
+  artifacts:
+    paths: ["*.tgz"]
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

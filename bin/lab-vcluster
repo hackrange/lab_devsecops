@@ -1,0 +1,68 @@
+#!/bin/bash
+# lab-vcluster create|delete|list <student-id>
+#
+# The student's virtual Kubernetes cluster.  The student is admin inside it; the
+# host enforces the same platform rules the hosted course does (the quota, no
+# NodePort or LoadBalancer, Pod Security Admission), because the lessons are
+# written against them.
+#
+# The cluster gets a TCP port on 10.10.10.70, proxied to its API.  That address
+# lives on a private interface of this machine, so the API is not reachable
+# from the network the machine sits on.
+#
+# Local Lab copy of the hosted node's script.  The only change is that the
+# proxy listens on 10.10.10.70 rather than every address.
+# Author: Tim Rice
+set -euo pipefail
+export PATH=$PATH:/usr/local/bin
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+VALUES=/etc/rancher/student-vcluster-values.yaml
+KCDIR=/etc/rancher/student-kubeconfigs
+STREAM=/etc/nginx/stream.d
+NODE_IP=10.10.10.70
+PORT_BASE=7000
+
+usage() { echo "usage: lab-vcluster create|delete|list [student-id]" >&2; exit 2; }
+port_for() {  # deterministic port from the student id, 7001-7250
+    local n; n=$(( 0x$(printf '%s' "$1" | sha256sum | cut -c1-4) % 250 + 1 ))
+    while grep -rqs "listen ${NODE_IP}:$((PORT_BASE+n));" "$STREAM" && ! grep -qs "student $1\$" "$STREAM/$1.conf" 2>/dev/null; do n=$(( n % 250 + 1 )); done
+    echo $((PORT_BASE + n))
+}
+
+case "${1:-}" in
+create)
+    S="${2:?student id}"; PORT=$(port_for "$S")
+    kubectl create namespace "$S" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    # host-level guardrails: no privileged pods, no host mounts, no host network
+    kubectl label namespace "$S" --overwrite >/dev/null \
+        pod-security.kubernetes.io/enforce=baseline \
+        pod-security.kubernetes.io/enforce-version=latest \
+        pod-security.kubernetes.io/warn=restricted \
+        lab.hackrange/tenant="$S"
+    vcluster create "$S" --namespace "$S" --connect=false --upgrade -f "$VALUES" >/dev/null 2>&1
+    # wait for the API to answer
+    for _ in $(seq 1 60); do
+        kubectl -n "$S" get secret "vc-$S" >/dev/null 2>&1 && break; sleep 5
+    done
+    CLUSTER_IP=$(kubectl -n "$S" get svc "$S" -o jsonpath='{.spec.clusterIP}')
+    printf '# student %s\nserver {\n    listen '"${NODE_IP}"':%s;\n    proxy_pass %s:443;\n    proxy_timeout 30m;\n}\n' \
+        "$S" "$PORT" "$CLUSTER_IP" > "$STREAM/$S.conf"
+    systemctl reload nginx 2>/dev/null || systemctl restart nginx
+    mkdir -p "$KCDIR"
+    kubectl -n "$S" get secret "vc-$S" -o jsonpath='{.data.config}' | base64 -d \
+      | sed "s#server: https://.*#server: https://${NODE_IP}:${PORT}#" > "$KCDIR/$S.yaml"
+    chmod 600 "$KCDIR/$S.yaml"
+    echo "$S ready: API https://${NODE_IP}:${PORT}  kubeconfig $KCDIR/$S.yaml"
+    ;;
+delete)
+    S="${2:?student id}"
+    vcluster delete "$S" --namespace "$S" >/dev/null 2>&1 || true
+    kubectl delete namespace "$S" --wait=false >/dev/null 2>&1 || true
+    rm -f "$STREAM/$S.conf" "$KCDIR/$S.yaml"
+    systemctl reload nginx 2>/dev/null || true
+    echo "$S removed"
+    ;;
+list) vcluster list ;;
+*) usage ;;
+esac

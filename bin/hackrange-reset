@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# Put part of the lab, or all of it, back the way a fresh install left it.
+#
+#   hackrange-reset forgejo     the Git server: repositories, pull requests,
+#                               pipelines (and Git Code Review with it, which
+#                               scans those repositories)
+#   hackrange-reset forgerepo   the package registry: its cache, your rules,
+#                               your token and portal account
+#   hackrange-reset gcr         Git Code Review: findings, scans, your account
+#   hackrange-reset cluster     your Kubernetes cluster: everything in it
+#   hackrange-reset keycloak    Keycloak: realms, clients, users
+#   hackrange-reset kong        Kong: services, routes, plugins
+#   hackrange-reset grafana     Grafana, Loki and Tempo: dashboards, logs, traces
+#   hackrange-reset all         every one of the above
+#
+# The student's data in that part is deleted for good and the part comes back
+# with its default setup and, where it has one, a fresh student account.  When
+# a login the lab session uses changes (the Git server, the registry, Git Code
+# Review, or everything), the lab session is restarted to pick it up, so
+# unpushed work in the workstation is lost too.  The control panel asks before
+# it runs this; run by hand, it asks as well unless given --yes.
+#
+# Where it can, it reuses the installer's own steps rather than new code: the
+# steps know how to set each service up, and they are tested on every install.
+#
+# Author: Tim Rice
+
+HR_ROOT="${HR_ROOT:-/opt/hackrange-labs}"
+export HR_ROOT
+# shellcheck source=../scripts/lib.sh
+. "$HR_ROOT/scripts/lib.sh"
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+TARGET="${1:-}"
+STATE="/etc/rancher/lab-identities/${HR_STUDENT}.json"
+case "$TARGET" in
+    forgejo|forgerepo|gcr|cluster|keycloak|kong|grafana|all) ;;
+    *) sed -n '2,/^# Author/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 2 ;;
+esac
+
+if [ "${2:-}" != --yes ]; then
+    printf 'This deletes the student data in "%s" for good.  Type RESET to continue: ' "$TARGET"
+    read -r answer < /dev/tty
+    [ "$answer" = RESET ] || { echo "Nothing was changed."; exit 0; }
+fi
+
+log "==== reset $TARGET"
+restart_session=0
+
+# Progress for the control panel, which starts resets as their own system job
+# (a reset of everything restarts the panel itself) and reads this file.
+STATUS_DIR=/run/hackrange
+install -d -m 755 "$STATUS_DIR"
+reset_status() {
+    printf '{"target": "%s", "state": "%s", "at": %s}\n' "$TARGET" "$1" "$(date +%s)" > "$STATUS_DIR/reset.json.tmp"
+    mv "$STATUS_DIR/reset.json.tmp" "$STATUS_DIR/reset.json"
+}
+reset_status running
+on_exit() {
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then reset_status "done"; else reset_status "failed"; fi
+}
+trap on_exit EXIT
+
+# ---------------------------------------------------------------- helpers
+
+# wipe SERVICE... -- VOLUME...  stop and remove services, then their volumes.
+wipe() {
+    local services=() volumes=() v
+    while [ $# -gt 0 ] && [ "$1" != -- ]; do services+=("$1"); shift; done
+    shift
+    volumes=("$@")
+    quiet compose rm -s -f "${services[@]}" || true
+    for v in "${volumes[@]}"; do
+        quiet docker volume rm "hackrange_${v}" || true
+    done
+}
+
+# forget KEY...  drop entries from the student's identity, so the provisioner
+# makes them again.
+forget() {
+    [ -f "$STATE" ] || return 0
+    python3 - "$STATE" "$@" <<'PY'
+import json, os, sys
+path, keys = sys.argv[1], sys.argv[2:]
+d = json.load(open(path))
+for k in keys:
+    d.pop(k, None)
+tmp = path + ".tmp"
+with open(tmp, "w") as fh:
+    json.dump(d, fh)
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+PY
+}
+
+provision() {
+    export FR_URL="https://labrepo.lab:8443" FR_IP="$HR_SERVICES_IP" FR_CA="$LABTLS/lab-ca.crt" TOKEN_DAYS=365
+    FR_PASSWORD="$(cat /etc/rancher/forgerepo-admin-password)"; export FR_PASSWORD
+    quiet /usr/local/sbin/hackrange-provision "$HR_STUDENT" "$HR_ETC/lab.env" "$@" ||
+        die "Could not make the student's accounts again.  See $HR_LOG"
+    chgrp docker "$HR_ETC/lab.env" && chmod 640 "$HR_ETC/lab.env"
+}
+
+step_script() { quiet bash "$HR_ROOT/scripts/$1" || die "The $1 step failed.  See $HR_LOG"; }
+
+reset_gcr_data() {
+    wipe gcr -- gcr-data gcr-work gcr-cache gcr-out
+    rm -f /etc/rancher/gcr-admin
+    forget sast_url sast_user sast_password sast_totp_secret sast_connection
+}
+
+# ---------------------------------------------------------------- the resets
+
+case "$TARGET" in
+    keycloak)
+        step "Resetting Keycloak"
+        wipe keycloak -- keycloak-data
+        quiet compose up -d keycloak || die "Keycloak would not start."
+        ;;
+    kong)
+        step "Resetting Kong"
+        wipe kong kong-migrations kong-db -- kong-db
+        quiet compose up -d kong || die "Kong would not start."
+        ;;
+    grafana)
+        step "Resetting Grafana, Loki and Tempo"
+        wipe grafana loki tempo -- grafana-data loki-data tempo-data
+        quiet compose up -d grafana || die "Grafana would not start."
+        ;;
+    cluster)
+        step "Resetting your Kubernetes cluster"
+        quiet /usr/local/sbin/lab-vcluster delete "$HR_STUDENT" || true
+        kubectl_host wait --for=delete "namespace/$HR_STUDENT" --timeout=300s >> "$HR_LOG" 2>&1 || true
+        provision --refresh-cluster
+        # The running lab session keeps working: its kubeconfig is updated in place.
+        if docker inspect hackrange-lab >/dev/null 2>&1; then
+            docker exec -i -u student hackrange-lab sh -c 'mkdir -p ~/.kube && cat > ~/.kube/config && chmod 600 ~/.kube/config' \
+                < "/etc/rancher/student-kubeconfigs/${HR_STUDENT}.yaml" || true
+        fi
+        ;;
+    forgerepo)
+        step "Resetting the package registry"
+        wipe forgerepo -- forgerepo-data
+        rm -f /etc/rancher/lab-identities/_shared-app-token
+        forget registry_token registry_token_app registry_user registry_password
+        step_script 60-services.sh
+        provision
+        restart_session=1
+        ;;
+    gcr)
+        step "Resetting Git Code Review"
+        reset_gcr_data
+        step_script 60-services.sh
+        provision
+        restart_session=1
+        ;;
+    forgejo)
+        step "Resetting the Git server (and Git Code Review, which scans it)"
+        wipe forgejo -- forgejo-data
+        reset_gcr_data
+        forget git_url git_user git_password
+        rm -f /etc/forgejo-runner/.runner
+        step_script 60-services.sh
+        step_script 80-runner.sh
+        provision --new-git-account
+        restart_session=1
+        ;;
+    all)
+        step "Resetting the whole lab"
+        docker rm -f hackrange-lab >/dev/null 2>&1 || true
+        quiet compose down -v --remove-orphans || true
+        quiet /usr/local/sbin/lab-vcluster delete "$HR_STUDENT" || true
+        kubectl_host wait --for=delete "namespace/$HR_STUDENT" --timeout=300s >> "$HR_LOG" 2>&1 || true
+        rm -rf /etc/rancher/lab-identities /etc/rancher/gcr-admin /etc/forgejo-runner/.runner "$HR_ETC/lab.env"
+        # The Labs tab's record goes too: "Complete" on work that no longer
+        # exists would only mislead.
+        rm -f /var/lib/hackrange/labs-progress.json
+        # The whole installer, as a fresh install runs it; the images are
+        # already built, so it takes minutes, not the first install's half hour.
+        quiet bash "$HR_ROOT/scripts/setup.sh" || die "Setting the lab up again failed.  See $HR_LOG"
+        ;;
+esac
+
+if [ "$restart_session" = 1 ] && docker inspect hackrange-lab >/dev/null 2>&1; then
+    say "restarting the lab session with the new logins"
+    docker rm -f hackrange-lab >/dev/null 2>&1 || true
+    quiet /usr/local/bin/hackrange-lab start || warn "The lab session did not start again.  Run: hackrange-lab start"
+fi
+ok "reset $TARGET finished"
+log "==== reset $TARGET finished"

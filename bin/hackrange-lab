@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# hackrange-lab: the student's one command for the Local Lab.
+#
+#   hackrange-lab info      how to get in: web address, SSH, username, password
+#   hackrange-lab start     start a lab session (a fresh workstation, new password)
+#   hackrange-lab desktop   open the session's desktop on this machine
+#   hackrange-lab shell     a terminal inside the session (no password)
+#   hackrange-lab ssh       connect with SSH (shows the password first)
+#   hackrange-lab env       your lab URLs, usernames, passwords and tokens
+#   hackrange-lab totp      the current Git Code Review two step code
+#   hackrange-lab stop      end the session (the workstation is deleted)
+#   hackrange-lab reset     end it and start a fresh one (new password)
+#   hackrange-lab status    is every part of the lab running?
+#   hackrange-lab update    get the latest version of the lab
+#   hackrange-lab diag      save a diagnostics file to send for help
+#
+# A session works like a hosted lab: the workstation is disposable, and your
+# work lives on the lab Git server.  Push before you stop.  The lab services,
+# your repositories and your Kubernetes cluster are NOT touched by stop or
+# reset; they keep running in the background.
+#
+# Some commands ask for your Ubuntu password: the lab password is kept where
+# only an administrator can read it.
+#
+# Author: Tim Rice
+set -uo pipefail
+
+NAME=hackrange-lab
+ENV_FILE=/etc/hackrange/lab.env
+CONF=/etc/hackrange/lab.conf
+HR_ROOT=/opt/hackrange-labs
+ACCESS=/usr/local/sbin/hackrange-access
+IMAGE=devsecops-lab-gui:latest
+WEB_PORT=8446
+SSH_PORT=2222
+RDP_PORT=13389
+SSH_KEYS_DIR=/etc/hackrange/ssh
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && . "$CONF"
+
+bold() { printf '\e[1m%s\e[0m\n' "$*"; }
+fail() { printf '\e[31m%s\e[0m\n' "$*" >&2; exit 1; }
+
+# As root: directly when we are root, through sudo otherwise.
+asroot() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
+
+# Docker without sudo needs the docker group, which only takes effect at the
+# next login.  Until then, borrow sudo rather than failing.
+DOCKER=(docker)
+if ! docker info >/dev/null 2>&1; then
+    [ "$(id -u)" -ne 0 ] && DOCKER=(sudo docker)
+    "${DOCKER[@]}" info >/dev/null 2>&1 || fail "Docker is not running.  Try: sudo systemctl start docker"
+fi
+d() { "${DOCKER[@]}" "$@"; }
+
+running() { [ "$(d inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" = true ]; }
+password() { asroot sed -n 's/^LAB_ACCESS_PASSWORD=//p' /etc/hackrange/access.env; }
+
+# This machine's address on its network, or loopback when it has none.
+address() {
+    local ip; ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+    echo "${ip:-127.0.0.1}"
+}
+
+info() { asroot "$ACCESS" info; }
+
+start() {
+    asroot test -r "$ENV_FILE" || fail "The lab is not installed yet.  Run the installer first."
+    if running; then info; return; fi
+    d rm -f "$NAME" >/dev/null 2>&1
+    printf 'Starting a fresh lab session with a new password...\n'
+
+    # A new password for every new session, so one that leaked stops working.
+    asroot "$ACCESS" rotate || fail "Could not make a new lab password."
+    # And a web certificate that names this machine's current address.
+    asroot "$ACCESS" cert || true
+
+    # The same SSH host keys in every session.  A fresh workstation would
+    # otherwise bring new ones each time, and ssh would greet the student with
+    # "REMOTE HOST IDENTIFICATION HAS CHANGED", which is alarming to someone
+    # new and teaches exactly the wrong habit (deleting the warning away).
+    local keys=() k
+    for k in "${SSH_KEYS_DIR}"/ssh_host_*_key; do
+        asroot test -f "$k" || continue
+        keys+=(-v "$k:/etc/ssh/$(basename "$k"):ro" -v "$k.pub:/etc/ssh/$(basename "$k").pub:ro")
+    done
+
+    # The session listens on loopback only.  nginx is the door to it (SSH on
+    # 2222, Remote Desktop on 13389, the web desktop on 8446) and answers
+    # private networks only.  hackrange-access is the network the web
+    # desktop's guacd reaches it on, by the name hackrange-lab.
+    # --restart unless-stopped: the lab never times out, and comes back after
+    # a reboot on its own, with the same password, until the student stops it.
+    d run -d --name "$NAME" --hostname devsecops-lab \
+        --restart unless-stopped \
+        --network hackrange-access \
+        --env-file "$ENV_FILE" \
+        -e "LAB_PASSWORD=$(password)" \
+        -e "LAB_LOCAL_HOST=$(address)" -e "LAB_LOCAL_WEB_PORT=$WEB_PORT" \
+        -e "LAB_LOCAL_SSH_PORT=$SSH_PORT" -e "LAB_LOCAL_RDP_PORT=$RDP_PORT" \
+        -p 127.0.0.1:12222:22 -p 127.0.0.1:13390:3389 \
+        "${keys[@]}" \
+        --shm-size 1g \
+        --log-opt max-size=10m --log-opt max-file=3 \
+        "$IMAGE" >/dev/null || fail "The lab session would not start.  Try: hackrange-lab status"
+    for _ in $(seq 1 60); do
+        d exec "$NAME" pgrep -x xrdp >/dev/null 2>&1 && break
+        sleep 2
+    done
+    d exec "$NAME" pgrep -x xrdp >/dev/null 2>&1 || fail "The session started but its desktop did not.  Try: hackrange-lab reset"
+    info
+}
+
+rdp_client() {
+    for c in xfreerdp3 xfreerdp sdl-freerdp3; do
+        command -v "$c" >/dev/null && { echo "$c"; return; }
+    done
+}
+
+desktop() {
+    running || start
+    local client; client="$(rdp_client)"
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ -n "$client" ]; then
+        printf 'Opening the lab desktop...\n'
+        mkdir -p "$HOME/.cache"
+        nohup "$client" /v:"127.0.0.1:${RDP_PORT}" /u:student /p:"$(password)" \
+            /cert:ignore /dynamic-resolution +clipboard /size:90% /title:"Hackrange Lab" \
+            >"$HOME/.cache/hackrange-rdp.log" 2>&1 &
+        disown
+    else
+        printf '\nThis machine has no screen to open the desktop on.  Open it in a web\n'
+        printf 'browser on your own computer instead:\n'
+        info
+    fi
+}
+
+stop() {
+    running || { d rm -f "$NAME" >/dev/null 2>&1; printf 'No lab session is running.\n'; return; }
+    if [ "${1:-}" != -y ] && [ "${1:-}" != --yes ]; then
+        printf 'This deletes the lab workstation.  Anything you have not pushed to the\n'
+        printf 'lab Git server is lost.  (Your repositories and cluster are kept.)\n'
+        read -r -p 'End the session? [y/N] ' a
+        case "$a" in y|Y|yes|YES) ;; *) printf 'Kept running.\n'; return ;; esac
+    fi
+    d rm -f "$NAME" >/dev/null && printf 'Lab session ended.\n'
+}
+
+ssh_in() {
+    running || start
+    printf '\nConnecting with SSH as student.  When it asks for the password, type:\n'
+    printf '    %s\n' "$(password)"
+    printf '(Nothing shows while you type a password; that is normal.  Type exit to leave.)\n\n'
+    # accept-new: trust the lab's key the first time without the yes/no
+    # question, and still refuse if it ever changes.
+    exec ssh -p "$SSH_PORT" -o StrictHostKeyChecking=accept-new student@127.0.0.1
+}
+
+in_lab() {
+    running || fail "No lab session is running.  Start one with: hackrange-lab start"
+    local tty=(-i); [ -t 0 ] && [ -t 1 ] && tty=(-it)
+    d exec "${tty[@]}" -u student -w /home/student "$NAME" bash -lc "$1"
+}
+
+check() {
+    if eval "$2" >/dev/null 2>&1; then printf '  \e[32m[ok]\e[0m    %s\n' "$1"; else printf '  \e[31m[down]\e[0m  %s   %s\n' "$1" "$3"; fi
+}
+
+status() {
+    bold "Hackrange Local Lab"
+    check "lab address 10.10.10.70"      "ip -4 addr show lab0 | grep -q 10.10.10.70"    "sudo systemctl restart hackrange-labnet"
+    check "Docker"                        "d info"                                         "sudo systemctl restart docker"
+    for c in hackrange-forgejo hackrange-forgerepo hackrange-gcr; do
+        check "$c" "[ \"\$(d inspect -f '{{.State.Health.Status}}' $c)\" = healthy ]" "sudo docker restart $c"
+    done
+    for c in hackrange-guacd hackrange-guacamole hackrange-keycloak hackrange-kong-db hackrange-grafana hackrange-loki hackrange-tempo; do
+        check "$c" "[ \"\$(d inspect -f '{{.State.Running}}' $c)\" = true ]" "sudo docker restart $c"
+    done
+    check "lab Git server (https://labgit.lab:8444)"   "curl -fsS -o /dev/null https://labgit.lab:8444/api/healthz"  "sudo systemctl restart nginx"
+    check "package registry (https://labrepo.lab:8443)" "curl -fsS -o /dev/null https://labrepo.lab:8443/"          "sudo systemctl restart nginx"
+    check "SAST platform (https://10.10.10.70:8445)"     "curl -fsS -o /dev/null https://10.10.10.70:8445/healthz"     "sudo systemctl restart nginx"
+    check "Keycloak (https://10.10.10.70:8448)"          "curl -fsS -o /dev/null https://10.10.10.70:8448/realms/master" "sudo docker restart hackrange-keycloak"
+    check "Kong Manager (https://10.10.10.70:8449)"      "curl -fsS -o /dev/null https://10.10.10.70:8449/kconfig.js"   "sudo docker restart hackrange-kong"
+    check "Grafana (https://10.10.10.70:8452)"           "curl -fsS -o /dev/null https://10.10.10.70:8452/api/health"   "sudo docker restart hackrange-grafana"
+    check "web desktop (https://127.0.0.1:$WEB_PORT)"    "curl -fsS -o /dev/null https://127.0.0.1:$WEB_PORT/guacamole/" "sudo systemctl restart nginx"
+    check "control panel (https://127.0.0.1:$WEB_PORT/control/)" "systemctl is-active --quiet hackrange-control" "sudo systemctl restart hackrange-control"
+    check "Kubernetes (k3s)"              "systemctl is-active --quiet k3s"                "sudo systemctl restart k3s"
+    check "your cluster's API"            "curl -sk -o /dev/null --max-time 5 \"\$(asroot sed -n 's/^LAB_K8S_API=//p' $ENV_FILE)/version\"" "hackrange-lab update"
+    check "CI runner"                     "systemctl is-active --quiet forgejo-runner"     "sudo systemctl restart forgejo-runner"
+    if running; then printf '  \e[32m[ok]\e[0m    lab session (workstation)\n'; else printf '  [off]   lab session       start one with: hackrange-lab start\n'; fi
+}
+
+case "${1:-help}" in
+    info)    info ;;
+    start)   start ;;
+    desktop) desktop ;;
+    shell)   in_lab 'exec bash -l' ;;
+    ssh)     ssh_in ;;
+    env)     in_lab 'lab-env' ;;
+    totp)    in_lab 'lab-totp' ;;
+    stop)    stop "${2:-}" ;;
+    reset)   stop -y; start ;;
+    status)  status ;;
+    update)  exec sudo bash "$HR_ROOT/install.sh" ;;
+    diag)    exec sudo /usr/local/sbin/hackrange-diag ;;
+    help|-h|--help) sed -n '2,/^# Author/p' "$0" | sed '$d; s/^# \{0,1\}//' ;;
+    *) fail "Unknown command: $1   (try: hackrange-lab help)" ;;
+esac

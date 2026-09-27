@@ -1,0 +1,27 @@
+{
+  "APP": {
+    "NAME": "HackRange Lab"
+  },
+  "CLIENT": {
+    "ERROR_CLIENT_202": "The lab server has closed the connection because the remote desktop is taking too long to respond. Please try again or contact your system administrator.",
+    "ERROR_CLIENT_308": "The lab server has closed the connection because there has been no response from your browser for long enough that it appeared to be disconnected. This is commonly caused by network problems, such as spotty wireless signal, or simply very slow network speeds. Please check your network and try again.",
+    "ERROR_CLIENT_31D": "The lab server is denying access to this connection because you have exhausted the limit for simultaneous connection use by an individual user. Please close one or more connections and try again.",
+    "ERROR_CLIENT_DEFAULT": "An internal error has occurred within the lab server, and the connection has been terminated. If the problem persists, please notify your system administrator, or check your system logs.",
+    "ERROR_TUNNEL_201": "The lab server has rejected this connection attempt because there are too many active connections. Please wait a few minutes and try again.",
+    "ERROR_TUNNEL_207": "The lab server is not currently reachable. Please check your network and try again.",
+    "ERROR_TUNNEL_208": "The lab server is not accepting connections. Please check your network and try again.",
+    "ERROR_TUNNEL_308": "The lab server has closed the connection because there has been no response from your browser for long enough that it appeared to be disconnected. This is commonly caused by network problems, such as spotty wireless signal, or simply very slow network speeds. Please check your network and try again.",
+    "ERROR_TUNNEL_31D": "The lab server is denying access to this connection because you have exhausted the limit for simultaneous connection use by an individual user. Please close one or more connections and try again.",
+    "ERROR_TUNNEL_DEFAULT": "An internal error has occurred within the lab server, and the connection has been terminated. If the problem persists, please notify your system administrator, or check your system logs.",
+    "ERROR_UPLOAD_DEFAULT": "An internal error has occurred within the lab server, and the connection has been terminated. If the problem persists, please notify your system administrator, or check your system logs.",
+    "HELP_CLIPBOARD": "Text copied/cut within the lab will appear here. Changes to the text below will affect the remote clipboard.",
+    "HELP_INPUT_METHOD_OSK": "Display and accept input from the built-in on-screen keyboard. The on-screen keyboard allows typing of key combinations that may otherwise be impossible (such as Ctrl-Alt-Del).",
+    "TEXT_CLIENT_STATUS_CONNECTING": "Connecting to your lab...",
+    "TEXT_CLIENT_STATUS_UNSTABLE": "The network connection to the lab server appears unstable.",
+    "TEXT_CLIENT_STATUS_WAITING": "Connected to your lab. Waiting for response..."
+  },
+  "SETTINGS_PREFERENCES": {
+    "HELP_DEFAULT_INPUT_METHOD": "The default input method determines how keyboard events are received by the lab. Changing this setting may be necessary when using a mobile device, or when typing through an IME. This setting can be overridden on a per-connection basis within the lab menu.",
+    "HELP_DEFAULT_MOUSE_MODE": "The default mouse emulation mode determines how the remote mouse will behave in new connections with respect to touches. This setting can be overridden on a per-connection basis within the lab menu."
+  }
+}

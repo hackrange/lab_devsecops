@@ -1,0 +1,47 @@
+From 762755971a763cf51598545d02f2c0fe7fc03121 Mon Sep 17 00:00:00 2001
+From: Tim Rice <tim.j.rice@hackrange.com>
+Date: Mon, 21 Sep 2026 21:01:12 +0000
+Subject: [PATCH 3/3] A personal namespace on Forgejo answered nothing and
+ looked like an empty account
+
+A developer's assignment is stored as an organization whatever it actually
+names, and list_repos only asked /orgs/{name}/repos.  On Gitea and Forgejo a
+name is either an organization or a user, and a personal namespace is a user,
+so scanning your own repositories warned that the account could not be listed
+while the repositories sat in plain sight under /users/{name}/repos.
+
+It now falls back to the user endpoint before giving up, and says which one it
+found.  GitHub has the same split and mostly hides it; here it is the ordinary
+case, because every individual's repositories live under their own name.
+---
+ lib/provider_gitea.sh | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/lib/provider_gitea.sh b/lib/provider_gitea.sh
+index da937eb..d2e76d1 100644
+--- a/lib/provider_gitea.sh
++++ b/lib/provider_gitea.sh
+@@ -180,8 +180,18 @@ provider_gitea_list_repos() {
+     log_info "enumerating repositories for organization: $org"
+     local body
+     body=$(_gitea_paginate "/orgs/${org}/repos") || {
+-      log_warn "could not list repositories for organization '$org' (see errors above)"
+-      continue
++      # In Gitea and Forgejo a name is either an organization or a user, and a
++      # scope entry does not say which.  GitHub has the same split and mostly
++      # hides it; here /orgs/{name}/repos simply fails for a personal account.
++      # That matters because a developer's assignment is stored as an
++      # organization whatever it actually names, so a learner scanning their
++      # own repositories was told the account could not be listed while the
++      # repositories sat in plain sight under /users/{name}/repos.
++      body=$(_gitea_paginate "/users/${org}/repos") || {
++        log_warn "could not list repositories for '$org': it is neither an organization nor a user this credential can see"
++        continue
++      }
++      log_info "'$org' is a user rather than an organization"
+     }
+     _gt_merge "$(printf '%s' "$body" | jq -c '.')"
+   done < <(printf '%s' "$orgs_json" | jq -r '.[]?')
+-- 
+2.43.0
+

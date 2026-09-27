@@ -1,0 +1,255 @@
+{
+ "days": [
+  {
+   "day": 6,
+   "week": 2,
+   "title": "Follow the Bytes",
+   "items": [
+    {
+     "id": "d06-is-number-pr",
+     "text": "A merged PR adding is-number, with an honest \"Dependencies changed\" section.",
+     "check": "d06_is_number_pr",
+     "github": false
+    },
+    {
+     "id": "d06-evil-helper-blocked",
+     "text": "The evil-helper report from the unprotected install, and proof that all three controls blocked it.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d06-hash-mismatch",
+     "text": "A THESE PACKAGES DO NOT MATCH THE HASHES error you caused on purpose.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d06-dependency-confusion",
+     "text": "Dependency confusion reproduced, then fixed two ways.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d06-bytes-and-inventory",
+     "text": "The \"where my bytes come from\" output, and a started dependency inventory.",
+     "check": "d06_inventory",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 7,
+   "week": 2,
+   "title": "Ecosystem Safari",
+   "items": [
+    {
+     "id": "d07-dependency-tree",
+     "text": "A verbose dependency tree with an \"omitted for conflict\" line, and the tree after removing the direct pin.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-jar-plugin-counts",
+     "text": "Your JAR and plugin counts, and the failing requirePluginVersions output.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-mirror-bypass",
+     "text": "The Downloading from vendor-plugins line that proves a mirror bypass, and the count that proves external:* caught everything else.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-three-refusals",
+     "text": "One refusal of each kind: not on the whitelist (Maven), DENIED (an image), and blocked by rule (APT).",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-snapshot-drift",
+     "text": "\"build one\" then \"build two: surprise\" under the same SNAPSHOT version, and the strict checksum failure.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-node-digests",
+     "text": "The index digest and amd64 manifest digest of node:24-bookworm-slim, the matching sha256sum, and the identical digest served by the lab registry.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-backport",
+     "text": "One backported package explained, with its changelog line.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-inrelease-signature",
+     "text": "The identical sha256sum of the two InRelease files, then Good signature and BAD signature.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d07-worksheets-log-pr",
+     "text": "Both worksheets, and a pull request on the lab Git server with your learning log.",
+     "check": "d07_log_pr",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 8,
+   "week": 2,
+   "title": "The Triage Desk",
+   "items": [
+    {
+     "id": "d08-npm-audit-runs",
+     "text": "Both npm audit runs on audit-demo, the silent zero and the three real findings, and your gate script's three exit codes.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d08-sboms",
+     "text": "CycloneDX and SPDX SBOMs of your project, and an image SBOM whose subject is a digest.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d08-scanner-totals",
+     "text": "Grype and Trivy totals for the same image, with the date.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d08-triage-pr",
+     "text": "A merged PR with docs/triage.md (three decisions, one dated exception, the SBOM record) and vex/node-base.openvex.json.",
+     "check": "d08_triage_pr",
+     "github": false
+    },
+    {
+     "id": "d08-vex-suppressed",
+     "text": "Scanner output showing your VEX statements as suppressed.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d08-remove-is-number-pr",
+     "text": "A merged PR removing is-number, with the SBOM diff in its description.",
+     "check": "d08_remove_is_number",
+     "github": false
+    }
+   ]
+  },
+  {
+   "day": 9,
+   "week": 2,
+   "title": "Shrink the Blast Radius",
+   "items": [
+    {
+     "id": "d09-dockerfile-pr",
+     "text": "A merged PR with Dockerfile (pinned by digest, USER 1000:1000, HEALTHCHECK), Dockerfile.distroless, .dockerignore, .conftest/policy/, and .github/workflows/image.yml.",
+     "check": "d09_dockerfile_pr",
+     "github": true
+    },
+    {
+     "id": "d09-policy-tests",
+     "text": "conftest verify passing three tests, including the placeholder-digest test you wrote after catching your own policy's bug.",
+     "check": "d09_policy_tests",
+     "github": false
+    },
+    {
+     "id": "d09-bad-dockerfile",
+     "text": "The hadolint, trivy config, and Conftest results on bad.Dockerfile, and your list of problems no tool caught.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d09-image-run",
+     "text": "A green image run on main whose job summary shows two pushed digests, and crane digest output from the lab that matches them.",
+     "check": "d09_image_run",
+     "github": true
+    },
+    {
+     "id": "d09-trivy-gate",
+     "text": "The trivy image gate result for your slim and distroless images, and the .trivyignore expiry experiment.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d09-leaky-layers",
+     "text": "The fake password and token you pulled out of the leaky image's layers, and your four-step response.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d09-required-check",
+     "text": "dockerfile-policy listed as a required status check on protect-main.",
+     "check": "d09_required_check",
+     "github": true
+    }
+   ]
+  },
+  {
+   "day": 10,
+   "week": 2,
+   "title": "Attack and Armor the Pipeline",
+   "items": [
+    {
+     "id": "d10-attack-chain",
+     "text": "The weak-workflow attack chain written out, and the script injection reproduced and then fixed with env:.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d10-zizmor-actionlint",
+     "text": "zizmor and actionlint output on the weak workflow and on your own (before and after pinning).",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d10-pinned-workflows",
+     "text": "Your workflows with every uses: pinned to a SHA plus a version comment, and least-privilege permissions:.",
+     "check": "d10_pinned",
+     "github": true
+    },
+    {
+     "id": "d10-signed-image",
+     "text": "A merged image workflow that signs the digest and writes provenance and SBOM attestations, and the run's Rekor index and attestation URL.",
+     "check": "d10_signed_image",
+     "github": true
+    },
+    {
+     "id": "d10-verify",
+     "text": "A cosign verify that passes for your identity and fails for a wrong one, plus a passing gh attestation verify.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d10-offline-signing",
+     "text": "The offline sign / tamper / signed-malware demo outputs.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d10-firewall-matrix",
+     "text": "The package firewall matrix filled in from the lab registry, including both refusal messages word for word, the lodash result with each token, and the warm-cache bypass.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d10-company-matrix",
+     "text": "The same matrix started for your company's product, with every untested row marked documented only or unknown.",
+     "check": null,
+     "github": false
+    },
+    {
+     "id": "d10-threat-model-pr",
+     "text": "docs/pipeline-threat-model.md merged through a PR that passed your hardened checks.",
+     "check": "d10_threat_model_pr",
+     "github": true
+    }
+   ]
+  }
+ ]
+}

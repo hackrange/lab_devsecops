@@ -1,0 +1,6 @@
+# The same step, fixed: the untrusted title travels as DATA in an environment
+# variable, and the script refers to it with a quoted shell variable.
+name: Say hello
+env:
+  PR_TITLE: ${{ github.event.pull_request.title }}
+run: echo "Thanks for the PR titled ${PR_TITLE}"

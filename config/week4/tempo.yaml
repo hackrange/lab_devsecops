@@ -1,0 +1,29 @@
+# Tempo for the Local Lab: one process, traces kept on local disk, and the
+# OpenTelemetry receivers on, so anything in the lab can send it traces.
+# Grafana reads it at http://tempo:3200.
+#
+# Author: Tim Rice
+stream_over_http_enabled: true
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+compactor:
+  compaction:
+    block_retention: 168h

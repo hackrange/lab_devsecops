@@ -1,0 +1,4 @@
+# Made on each machine by the installer, never shipped.
+images/devsecops-lab/ca/lab-ca.crt
+__pycache__/
+*.pyc

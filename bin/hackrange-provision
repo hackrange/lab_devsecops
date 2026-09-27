@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""
+Create (or complete) the Local Lab's one student, and write the environment
+their lab sessions start with.
+
+This is the hosted lab node's own provisioner (lab_provision.py, unchanged),
+called directly instead of over HTTP: the same Git account, cluster, registry
+token and portal account, and the same Git Code Review account with its second
+factor enrolled.  The LAB_* names below are the ones the LMS hands a hosted
+lab (LabIdentityService::env), so the workstation cannot tell the difference.
+
+Usage:  hackrange-provision STUDENT_ID ENV_FILE [--new-git-account] [--refresh-cluster]
+
+  --new-git-account   a fresh account on the lab Git server, with a new
+                      password (after the Git server was reset)
+  --refresh-cluster   make the student's cluster and record its kubeconfig
+                      (after the cluster was reset)
+
+Author: Tim Rice
+"""
+
+import json
+import os
+import sys
+
+sys.path.insert(0, "/usr/local/lib/hackrange")
+import lab_provision as lp  # noqa: E402
+
+
+def lab_env(ident: dict) -> dict:
+    """The environment a lab session starts with, as the LMS builds it."""
+    kube = ident.get("kubeconfig") or ""
+    import base64
+    env = {
+        # Tells the workstation it is a Local Lab, so its start page explains
+        # how to get in (desktop, terminal, SSH) as well as what is running.
+        "LAB_LOCAL": "1",
+        "LAB_SERVICES_IP": ident.get("services_ip", ""),
+        "LAB_REGISTRY_URL": ident.get("registry_url", ""),
+        "LAB_REGISTRY_TOKEN": ident.get("registry_token", ""),
+        "LAB_REGISTRY_TOKEN_APP": ident.get("registry_token_app", ""),
+        "LAB_REGISTRY_APP": ident.get("registry_app", ""),
+        "LAB_REGISTRY_USER": ident.get("registry_user") or ident.get("git_user", ""),
+        "LAB_REGISTRY_PASSWORD": ident.get("registry_password", ""),
+        "LAB_GIT_URL": ident.get("git_url", ""),
+        "LAB_GIT_USER": ident.get("git_user", ""),
+        "LAB_GIT_PASSWORD": ident.get("git_password", ""),
+        "LAB_K8S_API": ident.get("k8s_api", ""),
+        "LAB_SAST_URL": ident.get("sast_url", ""),
+        "LAB_SAST_TOTP": ident.get("sast_totp_secret", ""),
+        "LAB_SAST_USER": ident.get("sast_user", ""),
+        "LAB_SAST_PASSWORD": ident.get("sast_password", ""),
+        "LAB_KUBECONFIG_B64": base64.b64encode(kube.encode()).decode() if kube else "",
+    }
+    return {k: v for k, v in env.items() if v}
+
+
+def _update_state(student: str, fields: dict) -> None:
+    """Change entries in the student's identity file, kept root only."""
+    path = os.path.join(lp.STATE_DIR, f"{student}.json")
+    data = json.load(open(path)) if os.path.exists(path) else {"student": student}
+    data.update(fields)
+    os.makedirs(lp.STATE_DIR, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(data, fh)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def new_git_account(student: str) -> None:
+    """The provisioner makes the Git account only on a first run; after a
+    reset of the Git server it has to be made again, here."""
+    import secrets
+    pw = secrets.token_urlsafe(16)
+    status, body = lp.forgejo("POST", "/admin/users", {
+        "username": student, "email": f"{student}@lab.local",
+        "password": pw, "must_change_password": False})
+    if status == 422:
+        lp.forgejo("PATCH", f"/admin/users/{student}", {
+            "login_name": student, "password": pw, "must_change_password": False})
+    elif status != 201:
+        raise SystemExit(f"could not make the Git account: {status} {body}")
+    _update_state(student, {"git_url": lp.GIT_URL, "git_user": student, "git_password": pw})
+
+
+def refresh_cluster(student: str) -> None:
+    """Make (or remake) the student's cluster and record how to reach it."""
+    import re
+    rc, out = lp.run([lp.VCLUSTER, "create", student])
+    if rc != 0:
+        raise SystemExit(f"could not make the cluster: {out[-400:]}")
+    m = re.search(r"API (https://\S+)", out)
+    kube = f"/etc/rancher/student-kubeconfigs/{student}.yaml"
+    _update_state(student, {"k8s_api": m.group(1) if m else "",
+                            "kubeconfig": open(kube).read() if os.path.exists(kube) else ""})
+
+
+def main() -> int:
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a for a in sys.argv[1:] if a.startswith("--")}
+    if len(args) != 2 or flags - {"--new-git-account", "--refresh-cluster"}:
+        print("usage: hackrange-provision STUDENT_ID ENV_FILE [--new-git-account] [--refresh-cluster]", file=sys.stderr)
+        return 2
+    student, env_file = args
+    if not lp.ID_RE.match(student):
+        print(f"not a valid student id: {student}", file=sys.stderr)
+        return 2
+
+    if "--refresh-cluster" in flags:
+        refresh_cluster(student)
+    if "--new-git-account" in flags:
+        new_git_account(student)
+    ident = lp.provision(student)
+
+    # No session password here: hackrange-lab makes a new one for every new
+    # session (see hackrange-access), and hands it to the workstation itself.
+    env = lab_env(ident)
+    # The Week 4 services' logins, written by the installer (scripts/60).
+    extra = "/etc/hackrange/week4.env"
+    if os.path.exists(extra):
+        for line in open(extra):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                if k.startswith("LAB_") and v:
+                    env[k] = v
+    missing = [k for k in ("LAB_GIT_PASSWORD", "LAB_REGISTRY_TOKEN", "LAB_KUBECONFIG_B64",
+                           "LAB_SAST_PASSWORD", "LAB_SAST_TOTP") if k not in env]
+    old = os.umask(0o027)
+    try:
+        with open(env_file, "w") as fh:
+            fh.write("# The Local Lab session environment.  Written by hackrange-provision.\n")
+            for k, v in env.items():
+                if "\n" in v:
+                    raise SystemExit(f"{k} has a line break and cannot go in an env file")
+                fh.write(f"{k}={v}\n")
+    finally:
+        os.umask(old)
+    print(json.dumps({"student": student, "missing": missing}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,16 @@
+[Unit]
+Description=Forgejo Actions runner for the Local Lab
+Documentation=https://forgejo.org/docs/latest/admin/actions/
+After=network-online.target docker.service hackrange-labnet.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+WorkingDirectory=/etc/forgejo-runner
+ExecStart=/usr/local/bin/forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,102 @@
+/*
+ * HackRange branding for the Local Lab's web desktop (Guacamole 1.6.0).
+ *
+ * The HackRange palette, from hackrange.com: near black #0E0E0E, signature
+ * red #D71105 (dark red #5E0C09 on hover), card grey #F5F5F5, muted #686868,
+ * 10px corners.  Only the sign in screen and the few places Guacamole shows
+ * its own look are touched; the lab desktop itself fills the rest.
+ *
+ * Author: Tim Rice
+ */
+
+/* ---- the sign in screen ---------------------------------------------------- */
+/* Guacamole sets the white background with a rule of the same weight, so this
+   one is made more specific rather than relying on load order. */
+body .login-ui,
+body .login-ui.initial,
+body .login-ui.continuation {
+    background: #0E0E0E;
+}
+.login-ui .login-dialog {
+    max-width: 3.6in;
+    background: #FFFFFF;
+    border: none;
+    border-top: 6px solid #D71105;
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+    padding: 1.5em 1.5em 1.25em;
+    color: #0E0E0E;
+}
+.login-ui .login-dialog .logo {
+    width: 100%;
+    height: 9em;
+    margin: 0 auto 0.75em;
+    background-image: url('app/ext/hackrange-branding/images/logo.png');
+    background-size: contain;
+    -moz-background-size: contain;
+    -webkit-background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+/* The logo already says HackRange; the version badge means nothing to a student. */
+.login-ui .login-dialog .version {
+    display: none;
+}
+.login-ui .login-dialog th {
+    text-shadow: none;
+}
+.login-ui .login-fields .labeled-field .field-header {
+    color: #686868;
+    opacity: 1;
+}
+.login-ui .login-dialog .login-fields input {
+    border: 1px solid #CFCFCF;
+    border-radius: 6px;
+    background: #F5F5F5;
+}
+.login-ui .login-dialog .login-fields input:focus {
+    outline: none;
+    border-color: #D71105;
+    box-shadow: 0 0 0 2px rgba(215, 17, 5, 0.18);
+    background: #FFFFFF;
+}
+.login-ui .login-dialog .buttons input[type="submit"] {
+    background: #D71105;
+    border: 1px solid #D71105;
+    border-radius: 6px;
+    color: #FFFFFF;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.6em 1em;
+    text-shadow: none;
+    box-shadow: none;
+    cursor: pointer;
+}
+.login-ui .login-dialog .buttons input[type="submit"]:hover,
+.login-ui .login-dialog .buttons input[type="submit"]:focus {
+    background: #5E0C09;
+    border-color: #5E0C09;
+}
+.login-ui.error p.login-error {
+    background: #FFFFFF;
+    border: 1px solid #D71105;
+    border-left: 6px solid #D71105;
+    border-radius: 6px;
+    color: #0E0E0E;
+}
+
+/* ---- the rest of Guacamole's own screens ---------------------------------- */
+/* Buttons in the menu (Ctrl+Alt+Shift) and on the reconnect and error notices. */
+input[type="submit"], button.reconnect, button.home, button.logout {
+    background-color: #D71105;
+    border-color: #D71105;
+    color: #FFFFFF;
+    text-shadow: none;
+}
+input[type="submit"]:hover, button.reconnect:hover, button.home:hover, button.logout:hover {
+    background-color: #5E0C09;
+    border-color: #5E0C09;
+}
+.notification .title-bar, .menu .header, .header {
+    border-bottom-color: #D71105;
+}

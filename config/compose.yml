@@ -1,0 +1,329 @@
+# The three lab services, on the student's own machine.
+#
+# In the hosted course these run on a shared lab node.  Here there is one
+# student, so they run as plain containers and nginx on this machine puts them
+# on the same names, ports and certificate the lessons expect:
+#
+#   https://labgit.lab:8444     Forgejo, the lab Git server (with Actions)
+#   https://labrepo.lab:8443    ForgeRepo, the lab package registry
+#   https://10.10.10.70:8445    Git Code Review, the SAST and secrets platform
+#
+# plus the web desktop (Guacamole), which is how a student opens the lab in a
+# browser on their own computer, at https://<this machine>:8446.
+#
+# Each one listens on loopback only.  nginx is the front door, and it answers
+# on 10.10.10.70, an address this machine gives itself (see labnet in
+# scripts/20-network.sh), so nothing here is reachable from the network the
+# machine sits on.
+#
+# Secrets come from /etc/hackrange/services.env, written once by the installer.
+#
+# Author: Tim Rice
+name: hackrange
+
+# Every lab container keeps at most 30MB of logs, set here rather than
+# Docker-wide, so the lab never has to restart a Docker the student already had.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  forgejo:
+    logging: *logging
+    image: ${FORGEJO_IMAGE}
+    container_name: hackrange-forgejo
+    restart: unless-stopped
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      FORGEJO__server__ROOT_URL: "https://labgit.lab:8444/"
+      FORGEJO__server__DOMAIN: "labgit.lab"
+      FORGEJO__server__SSH_DOMAIN: "labgit.lab"
+      FORGEJO__server__DISABLE_SSH: "true"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__service__REQUIRE_SIGNIN_VIEW: "false"
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__database__DB_TYPE: "sqlite3"
+      # CI runs here from Day 5 on, exactly as in the hosted labs.
+      FORGEJO__actions__ENABLED: "true"
+      FORGEJO__migrations__ALLOWED_DOMAINS: ""
+      FORGEJO__webhook__ALLOWED_HOST_LIST: ""
+    ports:
+      - "127.0.0.1:13000:3000"
+    volumes:
+      - forgejo-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  forgerepo:
+    logging: *logging
+    image: ${FORGEREPO_IMAGE}
+    container_name: hackrange-forgerepo
+    restart: unless-stopped
+    stop_grace_period: 2m
+    environment:
+      # The same values the hosted registry runs with.  The public address has
+      # no port on purpose: nginx passes the Host header through, port and all,
+      # and that is what the registry writes into tarball and index links.
+      PUBLIC_URL: "https://labrepo.lab"
+      NODE_NAME: "lab-forgerepo"
+      ADMIN_USER: "admin"
+      ADMIN_PASSWORD: ${FORGEREPO_ADMIN_PASSWORD}
+      TRUST_PROXY: "1"
+    ports:
+      - "127.0.0.1:14444:4444"
+    volumes:
+      - forgerepo-data:/data
+    healthcheck:
+      test: ["CMD", "node", "/opt/npmrepo/src/healthcheck.js"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  gcr:
+    logging: *logging
+    image: ${GCR_IMAGE}
+    container_name: hackrange-gcr
+    restart: unless-stopped
+    # The scanner forks engines, and without an init their orphans pile up.
+    init: true
+    shm_size: 1g
+    environment:
+      # No GCR_DB_HOST: it falls back to SQLite in /data, as the hosted one does.
+      GCR_DB_HOST: ""
+      GCR_BIND_ADDRESS: "0.0.0.0"
+      # nginx terminates TLS and speaks plain HTTP to the app, so the session
+      # cookie must not be marked Secure, or the login page loops forever.
+      GCR_FORCE_HTTPS: "false"
+      GCR_TRUSTED_PROXIES: "127.0.0.1,172.16.0.0/12,10.10.10.70"
+      GCR_SECRET_KEY: ${GCR_SECRET_KEY}
+      GCR_ENCRYPTION_KEY: ${GCR_ENCRYPTION_KEY}
+      # The machine's own trust bundle: every public authority plus the lab
+      # CA.  Pointing these at the lab CA alone would break every scan that
+      # fetches rules or advisories from the internet.
+      REQUESTS_CA_BUNDLE: /bundle/ca-certificates.crt
+      SSL_CERT_FILE: /bundle/ca-certificates.crt
+      GIT_SSL_CAINFO: /bundle/ca-certificates.crt
+      NODE_EXTRA_CA_CERTS: /bundle/ca-certificates.crt
+      GCR_OUT_PATH: /out
+      GCR_WORK_PATH: /var/tmp/gcr-work
+    # The app reaches the lab Git server at https://10.10.10.70:8444, which is
+    # this machine: a container's traffic to it leaves through the Docker
+    # bridge and is delivered locally.  The names are here for anything that
+    # uses them instead of the address.
+    extra_hosts:
+      - "labgit.lab:10.10.10.70"
+      - "labrepo.lab:10.10.10.70"
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - gcr-data:/data
+      - gcr-work:/var/tmp/gcr-work
+      - gcr-cache:/home/gcr/.cache
+      - gcr-out:/out
+      # The directory, not the file: update-ca-certificates replaces the file,
+      # and a bind mount of a single file would keep showing the old one.
+      - /etc/ssl/certs:/bundle:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # The web desktop: guacd speaks Remote Desktop to the lab session, and the
+  # web app shows it in a browser.  guacd sits on hackrange-access, the network
+  # the lab session joins, so it reaches the session by name.  The web app,
+  # the one part the private network can reach before anyone signs in, sits
+  # on its own network (hackrange-guac) with guacd as the only bridge: the
+  # control panel's no-login door trusts hackrange-access, and the web app
+  # must not be on it.  The login is a file
+  # (user-mapping.xml) that hackrange-access rewrites with a new password at
+  # every new session; Guacamole notices within seconds.  It also bans an
+  # address after repeated wrong passwords, out of the box.
+  guacd:
+    logging: *logging
+    image: ${GUACD_IMAGE}
+    container_name: hackrange-guacd
+    restart: unless-stopped
+    networks: [access, guac]
+
+  guacamole:
+    logging: *logging
+    image: ${GUACAMOLE_IMAGE}
+    container_name: hackrange-guacamole
+    restart: unless-stopped
+    depends_on: [guacd]
+    environment:
+      GUACD_HOSTNAME: guacd
+      GUACAMOLE_HOME: /etc/hackrange-guacamole
+      # The web app sits behind nginx, which adds the real client address.
+      REMOTE_IP_VALVE_ENABLED: "true"
+      # A signed in student stays signed in for 30 days (in minutes) rather
+      # than the default hour: the lab should not time out under them.
+      API_SESSION_TIMEOUT: "43200"
+    ports:
+      - "127.0.0.1:18081:8080"
+    volumes:
+      - /etc/hackrange/guacamole:/etc/hackrange-guacamole:ro
+    # The login file is readable by this group only (hackrange-guac on the
+    # host), not by whatever user happens to have the image's own group id.
+    group_add: ["${HR_GUAC_GID}"]
+    networks: [guac]
+
+  # ---- the Week 4 services, always running ----------------------------------
+  # The lessons install their own copies in the student's cluster; these run
+  # beside the lab services so they are there from the first day, with their
+  # own logins on the start page and the control panel.
+
+  # Keycloak, the identity provider.  Development mode (its own small database
+  # in the volume), which is what a single student's lab needs, behind nginx.
+  keycloak:
+    logging: *logging
+    image: ${KEYCLOAK_IMAGE}
+    container_name: hackrange-keycloak
+    restart: unless-stopped
+    command: ["start-dev"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      # It is reached under two addresses (inside the lab and from the
+      # student's own computer), so it takes the hostname from the request.
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:18448:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+
+  # Kong, the API gateway, with its own Postgres so Kong Manager can create
+  # services, routes and plugins (without a database it is read only).
+  kong-db:
+    logging: *logging
+    image: postgres:16-alpine
+    container_name: hackrange-kong-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: ${KONG_PG_PASSWORD}
+    volumes:
+      - kong-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong", "-d", "kong"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  kong-migrations:
+    logging: *logging
+    image: ${KONG_IMAGE}
+    container_name: hackrange-kong-migrations
+    restart: "no"
+    command: ["sh", "-c", "kong migrations bootstrap || kong migrations up"]
+    environment: &kong-env
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD}
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_ADMIN_GUI_LISTEN: "0.0.0.0:8002"
+      KONG_ANONYMOUS_REPORTS: "off"
+    depends_on:
+      kong-db:
+        condition: service_healthy
+
+  kong:
+    logging: *logging
+    image: ${KONG_IMAGE}
+    container_name: hackrange-kong
+    restart: unless-stopped
+    environment: *kong-env
+    ports:
+      - "127.0.0.1:18451:8000"
+      - "127.0.0.1:18450:8001"
+      - "127.0.0.1:18449:8002"
+    depends_on:
+      kong-migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  # Grafana, with Loki (logs) and Tempo (traces) already connected.
+  loki:
+    logging: *logging
+    image: ${LOKI_IMAGE}
+    container_name: hackrange-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki-data:/loki
+
+  tempo:
+    logging: *logging
+    image: ${TEMPO_IMAGE}
+    container_name: hackrange-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    # Tempo's image runs as an unprivileged user that cannot write a fresh
+    # volume; root inside its own container, with nothing published.
+    user: "0"
+    volumes:
+      - ${HR_ROOT}/config/week4/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  grafana:
+    logging: *logging
+    image: ${GRAFANA_IMAGE}
+    container_name: hackrange-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    ports:
+      - "127.0.0.1:18452:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ${HR_ROOT}/config/week4/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/hackrange.yaml:ro
+    depends_on: [loki, tempo]
+
+networks:
+  access:
+    name: hackrange-access
+  guac:
+    name: hackrange-guac
+
+volumes:
+  keycloak-data:
+  kong-db:
+  loki-data:
+  tempo-data:
+  grafana-data:
+  forgejo-data:
+  forgerepo-data:
+  gcr-data:
+  gcr-work:
+  gcr-cache:
+  gcr-out:

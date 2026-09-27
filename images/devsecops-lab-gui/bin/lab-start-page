@@ -1,0 +1,338 @@
+#!/bin/bash
+# Build the browser start page for this session.
+#
+# Firefox opens file:///opt/lab/start/index.html, so the first thing a student
+# sees is a list of the services that actually exist for them today, with the
+# login for each one.  The values come from the same LAB_* environment variables
+# lab-env prints, set by the lab broker, so the page and the command line can
+# never disagree.  Anything the broker did not set is shown as not yet running
+# rather than as a link that goes nowhere: the Week 4 services (Grafana,
+# Keycloak, Kong) are exactly that until the week they are stood up.
+#
+# In a Local Lab (LAB_LOCAL=1, set by the Local Lab installer) the page also
+# tells a student how to get into this lab (the desktop, a terminal, SSH) in
+# plain steps, because on their own machine nobody else hands them the way in.
+#
+# Author: Tim Rice
+set -u
+
+LOCAL="${LAB_LOCAL:-}"
+LOCAL_HOST="${LAB_LOCAL_HOST:-127.0.0.1}"
+LOCAL_SSH_PORT="${LAB_LOCAL_SSH_PORT:-2222}"
+LOCAL_RDP_PORT="${LAB_LOCAL_RDP_PORT:-13389}"
+LOCAL_WEB_PORT="${LAB_LOCAL_WEB_PORT:-8446}"
+
+OUT_DIR=/opt/lab/start
+OUT="$OUT_DIR/index.html"
+mkdir -p "$OUT_DIR"
+
+# HTML-escape, because a generated password is allowed to contain & or <.
+esc() { printf '%s' "${1:-}" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
+
+REGISTRY_URL="${LAB_REGISTRY_URL:-https://labrepo.lab:8443}"
+# The portal lives under /admin, and the trailing slash is NOT optional: without
+# it the server answers 403, which reads like "you are not allowed" rather than
+# "you are one character short".  The bare root is the registry API that npm,
+# pip and Maven talk to, and it is not a page worth opening.
+REGISTRY_PORTAL="${REGISTRY_URL%/}/admin/"
+# The findings platform, on the node's IP because the lab certificate authority
+# can no longer sign a name (see the nginx note on the services host).
+SAST_URL="${LAB_SAST_URL:-}"
+GIT_URL="${LAB_GIT_URL:-https://labgit.lab:8444}"
+# Straight to the sign in form.  The bare root answers 200 with Forgejo's own
+# landing page ("Beyond coding. We forge."), which tells a student nothing about
+# this lab and leaves them hunting for the sign in link.  The bare root is still
+# what git talks to, and that is the value in the environment.
+GIT_PORTAL="${GIT_URL%/}/user/login?redirect_to=%2f"
+# The lab broker attaches a sidecar container on the private per-lab network
+
+# card <title> <url | empty | -> <blurb> [label:value ...]
+# An empty url means the service is not running yet; "-" means it has no page.
+card() {
+    local title="$1" url="$2" blurb="$3"; shift 3
+    printf '  <section class="card">\n'
+    printf '    <h2>%s</h2>\n' "$(esc "$title")"
+    if [ "$url" = - ]; then
+        :   # a card with nothing to open, and nothing missing either
+    elif [ -n "$url" ]; then
+        # A new tab, every time.  This page IS the lab's directory: following a
+        # link in place loses it, and getting back means remembering a file://
+        # path nobody wrote down.  rel=noopener because target=_blank without it
+        # hands the opened page a handle on this one.
+        printf '    <p class="link"><a href="%s" target="_blank" rel="noopener noreferrer">%s</a></p>\n' \
+            "$(esc "$url")" "$(esc "$url")"
+    else
+        printf '    <p class="pending">Not running yet for your lab.</p>\n'
+    fi
+    printf '    <p class="blurb">%s</p>\n' "$(esc "$blurb")"
+    local pair
+    for pair in "$@"; do
+        [ -n "${pair#*:}" ] || continue
+        local slug
+        slug="$(printf '%s' "${pair%%:*}" | tr 'A-Z ' 'a-z-')"
+        printf '    <p class="cred"><span>%s</span><code data-cred="%s">%s</code></p>\n' \
+            "$(esc "${pair%%:*}")" "$(esc "$slug")" "$(esc "${pair#*:}")"
+    done
+    printf '  </section>\n'
+}
+
+{
+cat <<'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Lab Services</title>
+<style>
+  :root { --accent:#D71105; --ink:#0E0E0E; --muted:#5b5b5b; --line:#e2e2e2; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#fff; color:var(--ink);
+         font-family:"DejaVu Sans","Liberation Sans",Arial,sans-serif; line-height:1.45; }
+  header { border-bottom:4px solid var(--accent); padding:22px 28px 16px; }
+  header h1 { margin:0; font-size:23px; letter-spacing:.2px; }
+  header p { margin:6px 0 0; color:var(--muted); font-size:14px; }
+  main { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+         gap:16px; padding:24px 28px 32px; max-width:1200px; }
+  .card { border:1px solid var(--line); border-left:4px solid var(--accent);
+          border-radius:5px; padding:14px 16px; background:#fff; }
+  .card h2 { margin:0 0 6px; font-size:16px; }
+  .card .link a { color:var(--accent); font-weight:600; text-decoration:none; word-break:break-all; }
+  .card .link a:hover { text-decoration:underline; }
+  .card .pending { color:var(--muted); font-style:italic; margin:0 0 6px; font-size:14px; }
+  .card .link { margin:0 0 6px; font-size:14px; }
+  .card .blurb { margin:0 0 10px; color:var(--muted); font-size:13px; }
+  .card .cred { display:flex; gap:8px; align-items:baseline; margin:3px 0; font-size:13px; }
+  .card .cred span { color:var(--muted); min-width:92px; }
+  .card .cred code { background:#f5f5f5; border:1px solid var(--line); border-radius:3px;
+                     padding:1px 6px; font-size:12.5px; word-break:break-all; }
+  .howto { grid-column:1 / -1; }
+  .howto ol { margin:6px 0 0 18px; padding:0; font-size:14px; }
+  .howto li { margin:0 0 12px; }
+  .howto li p { margin:3px 0; color:var(--muted); font-size:13px; }
+  .howto pre { background:#f5f5f5; border:1px solid var(--line); border-radius:3px;
+               padding:6px 10px; margin:4px 0; font-size:13.5px; white-space:pre-wrap; }
+  footer { border-top:1px solid var(--line); padding:14px 28px 26px;
+           color:var(--muted); font-size:13px; max-width:1200px; }
+  footer code { background:#f5f5f5; border:1px solid var(--line); border-radius:3px; padding:1px 5px; }
+  .card .cred .copy { font:inherit; font-size:12px; padding:2px 10px; cursor:pointer;
+                      background:var(--accent); color:#fff; border:0; border-radius:3px; }
+  .card .cred .copy.done { background:var(--ink); }
+  .card .cred code .digits { color:var(--ink); font-weight:bold; min-width:0; letter-spacing:1px; }
+  .card .cred code .left { color:var(--muted); min-width:0; }
+</style>
+</head>
+<body>
+HTML
+if [ "$LOCAL" = 1 ]; then
+# In a Local Lab the start page is the live control panel.  It opens only if
+# it answers (its icon loads); otherwise this static page stays, so a student
+# is never left on a browser error.
+cat <<'HTML'
+<script>
+(function () {
+  var probe = new Image();
+  probe.onload = function () { location.replace("https://10.10.10.70:8447/"); };
+  probe.src = "https://10.10.10.70:8447/static/favicon.png?" + Date.now();
+})();
+</script>
+<header>
+  <h1>Your Local Lab</h1>
+  <p><a href="https://10.10.10.70:8447/">Open your lab control panel</a> (status, start and stop, and how hard the lab is working).</p>
+  <p>This desktop is disposable, like the hosted lab: push your work to the lab Git server before you run <code>hackrange-lab stop</code>.</p>
+</header>
+<main>
+HTML
+else
+cat <<'HTML'
+<header>
+  <h1>Your lab services</h1>
+  <p>This desktop is disposable. Push your work to a Git remote before you log off.</p>
+</header>
+<main>
+HTML
+fi
+
+# ---- Local Lab: the ways into this lab, for someone new to all of it --------
+if [ "$LOCAL" = 1 ]; then
+    pw="$(esc "${LAB_PASSWORD:-}")"
+    host="$(esc "$LOCAL_HOST")"
+    cat <<HTML
+  <section class="card howto">
+    <h2>How to get into this lab</h2>
+    <p class="blurb">You are already in it: this is the lab desktop.  These are all the ways in, and you can use them at the same time.  Every one uses the same username and password:</p>
+    <p class="cred"><span>username</span><code>student</code></p>
+    <p class="cred"><span>password</span><code>${pw}</code></p>
+    <p class="blurb">This password changes every time a new lab session starts.  To see the current one, run <code>/opt/hackrange-labs/show_information.sh</code> on your Ubuntu machine.  Keep it to yourself.</p>
+    <ol>
+      <li><strong>In a web browser on your own computer.</strong>
+        <p>Open this address:</p>
+        <pre>https://${host}:${LOCAL_WEB_PORT}</pre>
+        <p>The first time, the browser warns that the connection is not private, because the lab uses its own certificate.  For this address only, choose <em>Advanced</em> and then <em>Continue</em>.  Never do that for a bank, email or shopping site.</p></li>
+      <li><strong>A terminal on this desktop.</strong>
+        <p>Double-click <em>Terminal</em> on the desktop.  Every lesson command works there.</p></li>
+      <li><strong>A terminal from your Ubuntu machine, with no password.</strong>
+        <p>Open a terminal on your Ubuntu machine (press Ctrl+Alt+T) and type:</p>
+        <pre>hackrange-lab shell</pre>
+        <p>You are now inside the lab.  Type <code>exit</code> to leave.</p></li>
+      <li><strong>SSH, the way you reach real servers.</strong>
+        <p>In a terminal on your Ubuntu machine, type:</p>
+        <pre>ssh -p ${LOCAL_SSH_PORT} student@${host}</pre>
+        <p>The first time, it asks <em>Are you sure you want to continue connecting?</em>  Type <code>yes</code> and press Enter.</p>
+        <p>Then it asks for the password above.  Nothing appears on the screen while you type a password; that is normal.  Press Enter when done.</p>
+        <p>Type <code>exit</code> to leave.  Shortcut: <code>hackrange-lab ssh</code> shows the password and connects for you.</p></li>
+      <li><strong>Remote Desktop, to open this desktop again.</strong>
+        <p>On your Ubuntu machine run <code>hackrange-lab desktop</code>, or point any Remote Desktop app at <code>${host}:${LOCAL_RDP_PORT}</code> with the same user and password.</p></li>
+    </ol>
+  </section>
+HTML
+fi
+
+card "Package registry (ForgeRepo)" "$REGISTRY_PORTAL" \
+     "Every package and image you install comes through here.  Your npm, pip, Maven and apt clients are already pointed at it and already hold your token, so nothing stops to ask.  Sign in to the portal with the account below to see why a package was refused, and to scan a repository of your own." \
+     "username:${LAB_REGISTRY_USER:-}" \
+     "password:${LAB_REGISTRY_PASSWORD:-}" \
+     "clients use:$REGISTRY_URL" \
+     "your token:${LAB_REGISTRY_TOKEN:-}"
+
+card "Git server (Forgejo)" "$GIT_PORTAL" \
+     "Your own remote for the pipeline exercises: repositories, pull requests and CI." \
+     "username:${LAB_GIT_USER:-}" \
+     "password:${LAB_GIT_PASSWORD:-}" \
+     "git uses:$GIT_URL"
+
+card "Code review (Git Code Review)" "$SAST_URL" \
+     "The findings platform your repository is scanned into, and the server the editor plugin talks to.  Your account is ready: this password is the real one, and the second factor is already enrolled, so there is no QR code to scan." \
+     "username:${LAB_SAST_USER:-}" \
+     "password:${LAB_SAST_PASSWORD:-}" \
+     "two step code:${LAB_SAST_TOTP:+run lab-totp}"
+
+if [ "$LOCAL" = 1 ]; then
+    card "Keycloak, Kong and Grafana (Week 4)" - \
+         "You start these yourself, inside your own Kubernetes cluster, in the Week 4 labs.  Each lesson shows how to open it with kubectl port-forward, so there is nothing to click here yet."
+else
+card "Grafana" "${LAB_GRAFANA_URL:-}" \
+     "Week 4: the dashboards for the pipeline and platform metrics." \
+     "username:${LAB_GRAFANA_USER:-}" \
+     "password:${LAB_GRAFANA_PASSWORD:-}"
+
+card "Keycloak" "${LAB_KEYCLOAK_URL:-}" \
+     "Week 4: the identity provider whose realm and clients you configure." \
+     "username:${LAB_KEYCLOAK_USER:-}" \
+     "password:${LAB_KEYCLOAK_PASSWORD:-}"
+
+card "Kong Manager" "${LAB_KONG_URL:-}" \
+     "Week 4: the API gateway you put in front of the service." \
+     "admin api:${LAB_KONG_ADMIN_URL:-}" \
+     "username:${LAB_KONG_USER:-}" \
+     "password:${LAB_KONG_PASSWORD:-}"
+fi
+
+if [ "$LOCAL" = 1 ]; then
+card "Your Kubernetes cluster" - \
+     "Week 3 onward.  It is already running and kubectl is already set up for it.  To check, open a terminal and type:  kubectl get namespaces" \
+     "api:${LAB_K8S_API:-}"
+else
+card "Your Kubernetes cluster" "${LAB_K8S_DASHBOARD_URL:-}" \
+     "Week 3 onward. The command line is the way in: kubectl is already configured." \
+     "api:${LAB_K8S_API:-}"
+fi
+
+# A live second factor, worked out in the page from the same secret the
+# platform holds.  It is here because the alternative is a learner typing
+# `lab-totp` in a terminal, reading six digits, and typing them into a browser
+# before they expire, which is a fiddly thirty seconds and the first thing they
+# meet.  The row falls back to that command on its own if anything below fails,
+# so the page is never worse than it was.
+if [ -n "${LAB_SAST_TOTP:-}" ]; then
+cat <<HTML
+<script>
+(function () {
+  var secret = "$(printf '%s' "$LAB_SAST_TOTP" | sed 's/[\\"]/\\&/g')";
+  var cell = document.querySelector('[data-cred="two-step-code"]');
+  if (!cell || !window.crypto || !crypto.subtle) return;   // leave the hint
+
+  // RFC 4648 base32, which is what an authenticator secret is written in.
+  function b32(s) {
+    var A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", bits = 0, value = 0, out = [];
+    s = s.replace(/=+\$/, "").toUpperCase();
+    for (var i = 0; i < s.length; i++) {
+      var idx = A.indexOf(s[i]);
+      if (idx < 0) continue;
+      value = (value << 5) | idx; bits += 5;
+      if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; }
+    }
+    return new Uint8Array(out);
+  }
+
+  var keyPromise = crypto.subtle.importKey(
+    "raw", b32(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+
+  function tick() {
+    var now = Math.floor(Date.now() / 1000), step = Math.floor(now / 30);
+    var counter = new Uint8Array(8);
+    for (var i = 7; i >= 0; i--) { counter[i] = step & 255; step = Math.floor(step / 256); }
+    keyPromise.then(function (key) {
+      return crypto.subtle.sign("HMAC", key, counter);
+    }).then(function (sig) {
+      var h = new Uint8Array(sig), o = h[h.length - 1] & 15;
+      var n = ((h[o] & 127) << 24 | h[o+1] << 16 | h[o+2] << 8 | h[o+3]) % 1000000;
+      var code = ("00000" + n).slice(-6);
+      // Only the countdown changes every second.  Rewriting the digits too
+      // would wipe out a selection the moment it was made.
+      if (digits.textContent !== code) digits.textContent = code;
+      left.textContent = "(" + (30 - now % 30) + "s)";
+    }).catch(function () { cell.textContent = "run lab-totp"; if (button) button.remove(); });
+  }
+
+  // The code, the time it has left, and a Copy button beside them.
+  var digits = document.createElement("span"), left = document.createElement("span");
+  digits.className = "digits"; left.className = "left";
+  cell.textContent = "";
+  cell.appendChild(digits);
+  cell.appendChild(document.createTextNode(" "));
+  cell.appendChild(left);
+  var button = document.createElement("button");
+  button.type = "button"; button.className = "copy"; button.textContent = "Copy";
+  cell.parentNode.appendChild(button);
+  function copied(ok) {
+    button.textContent = ok ? "Copied" : "Select it";
+    button.classList.toggle("done", ok);
+    setTimeout(function () { button.textContent = "Copy"; button.classList.remove("done"); }, 1500);
+  }
+  button.addEventListener("click", function () {
+    var code = digits.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function () { copied(true); }, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var t = document.createElement("textarea");
+      t.value = code; document.body.appendChild(t); t.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+      t.remove(); copied(ok);
+    }
+  });
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+HTML
+fi
+
+cat <<'HTML'
+</main>
+<footer>
+  Run <code>lab-env</code> in a terminal for the same values, or open
+  <code>~/LAB-ENVIRONMENT.txt</code>. Run <code>lab-versions</code> for the tool
+  list. The lab certificate authority is already trusted by this desktop, by
+  Firefox, and by every command line tool on the box, so nothing here needs an
+  insecure flag.
+  To come back to this page, open Firefox (it is the home page) or type
+  <code>file:///opt/lab/start/index.html</code> in the address bar.
+</footer>
+</body>
+</html>
+HTML
+} > "$OUT"
+
+chmod 644 "$OUT"

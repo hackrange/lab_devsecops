@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# What to do when something in this lab wants to open a web browser.
+#
+# There is no browser here, and there should not be: this is a build box you
+# reach over SSH.  Without this, `gh auth login` ends on
+#
+#   Failed opening a web browser at https://github.com/login/device
+#   exec: "xdg-open,x-www-browser,www-browser,wslview": executable file not found
+#
+# which reads like a broken lab rather than the ordinary fact that a server has
+# no desktop.  gh honours $BROWSER, so it calls this instead and the student
+# gets an instruction.
+#
+# Author: Tim Rice
+set -euo pipefail
+
+url="${1:-}"
+line="$(printf '%*s' 66 '' | tr ' ' '-')"
+
+printf '\n%s\n' "$line"
+printf '  Open this on YOUR OWN computer, not in the lab:\n\n'
+printf '      %s\n\n' "${url:-(no address was given)}"
+printf '  This box has no browser, which is normal for a build machine.\n'
+printf '  Sign in there, then come back here and press Enter.\n'
+printf '%s\n\n' "$line"

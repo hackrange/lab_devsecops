@@ -1,0 +1,24 @@
+# A rule for something the stock ruleset MISSES.
+#
+# Replay the incident against Falco's built-in rules and you will see the shell,
+# the /etc/shadow read, the key hunt, the /tmp implant and the SSH beacon -- but
+# nothing for step 5, where the attacker appends their key to authorized_keys.
+# Writing that detection is the "now cover the gap" half of the lab.  This is a
+# worked reference: any process opening an authorized_keys file for writing.
+#
+#   falco --validate rules/ssh-key-persistence.yaml
+#   falco -o engine.kind=replay \
+#         -o engine.replay.capture_file=~/fixtures/day15/incident.scap \
+#         -r rules/ssh-key-persistence.yaml
+- macro: open_for_write
+  condition: (evt.type in (open,openat,openat2) and evt.is_open_write=true and fd.typechar='f')
+
+- rule: SSH authorized_keys Written
+  desc: A program opened an authorized_keys file for writing -- classic SSH key persistence.
+  condition: open_for_write and fd.name endswith "authorized_keys"
+  output: >
+    authorized_keys modified
+    (command=%proc.cmdline file=%fd.name parent=%proc.pname
+     gparent=%proc.aname[2] user=%user.name container=%container.id)
+  priority: CRITICAL
+  tags: [day15, lab, persistence]

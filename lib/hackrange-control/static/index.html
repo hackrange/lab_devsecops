@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HackRange Lab</title>
+<link rel="icon" type="image/png" href="static/favicon.png">
+<link rel="stylesheet" href="static/app.css">
+<script src="static/app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <img class="brand" src="static/logo.png" alt="HackRange">
+    <div class="titles">
+      <h1>Your Local Lab</h1>
+      <p class="subtitle">Learning the Software Build Process</p>
+    </div>
+    <div class="topbar-right">
+      <span id="summary" class="pill pill-muted">Loading...</span>
+      <button id="signout" class="link-button" hidden>Sign out</button>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs" hidden>
+    <div class="tabs-inner">
+      <a href="#control" data-tab="control" class="tab active">Lab control</a>
+      <a href="#labs" data-tab="labs" class="tab">Labs</a>
+    </div>
+  </nav>
+</header>
+
+<main id="labs-view" class="container" hidden>
+  <section class="card labs-head">
+    <div class="labs-head-row">
+      <div>
+        <h2>Your labs</h2>
+        <p class="hint">Work through a lab in your lab desktop, then open it here and press <strong>Check my work</strong>.
+          The lab checks what it can see for itself (your repository, your pipelines, your cluster, your GitHub
+          repository), and you tick the things only you could have seen.</p>
+      </div>
+      <div class="overall"><strong id="labs-done">0</strong><span> of <span id="labs-total">20</span> labs complete</span>
+        <div class="bar"><span id="labs-bar"></span></div></div>
+    </div>
+    <form id="gh-form" class="gh-row" autocomplete="off">
+      <label>Your GitHub username <input id="gh-user" maxlength="39" spellcheck="false" placeholder="for the GitHub parts of Days 2, 3, 4, 9, 10 and 20"></label>
+      <button type="submit" class="secondary">Save</button>
+      <span id="gh-msg" class="hint"></span>
+    </form>
+  </section>
+  <div id="weeks"></div>
+</main>
+
+<main id="app" class="container" hidden>
+
+  <div id="reset-banner" class="banner" hidden></div>
+
+  <section class="meters" aria-label="How hard the lab machine is working">
+    <div class="meter card"><div class="meter-head"><span>Processor</span><strong id="cpu-value">-</strong></div>
+      <div class="bar"><span id="cpu-bar"></span></div><p class="meter-note" id="cpu-note"></p></div>
+    <div class="meter card"><div class="meter-head"><span>Memory</span><strong id="mem-value">-</strong></div>
+      <div class="bar"><span id="mem-bar"></span></div><p class="meter-note" id="mem-note"></p></div>
+    <div class="meter card"><div class="meter-head"><span>Disk</span><strong id="disk-value">-</strong></div>
+      <div class="bar"><span id="disk-bar"></span></div><p class="meter-note" id="disk-note"></p></div>
+  </section>
+
+  <section class="card access">
+    <div class="section-head">
+      <h2>How to get into your lab</h2>
+      <span class="hint">One login for everything.  It changes every time a new lab session starts.</span>
+    </div>
+    <div class="access-grid">
+      <div>
+        <div class="kv"><span>Username</span><code id="acc-user">student</code></div>
+        <div class="kv"><span>Password</span><code id="acc-pass" class="secret"></code>
+          <button class="small" data-reveal="acc-pass">Show</button><button class="small" data-copy="acc-pass">Copy</button></div>
+      </div>
+      <div>
+        <div class="kv"><span>Web desktop</span><a id="acc-web" target="_blank" rel="noopener noreferrer"></a></div>
+        <div class="kv"><span>SSH</span><code id="acc-ssh"></code><button class="small" data-copy="acc-ssh">Copy</button></div>
+        <div class="kv"><span>Remote Desktop</span><code id="acc-rdp"></code></div>
+      </div>
+    </div>
+    <p class="hint" id="acc-where"></p>
+  </section>
+
+  <div class="section-head outside">
+    <h2>Lab services</h2>
+    <span class="hint">Everything starts on its own.  Stop what you are not using to free up memory.</span>
+  </div>
+  <section id="components" class="grid"></section>
+
+  <section class="card danger">
+    <div class="section-head">
+      <h2>Start over</h2>
+      <span class="hint">If something is broken and you cannot tell what, put the whole lab back the way a fresh install left it.</span>
+    </div>
+    <p class="hint">This deletes <strong>everything you made in the lab</strong>: your repositories and pipelines on the Git server,
+      your package registry rules, your findings, everything in your Kubernetes cluster, and your Keycloak, Kong and Grafana setup.
+      Your lab desktop restarts with a new password.  Copy anything you want to keep somewhere else (for example to GitHub) first.
+      It takes a few minutes.</p>
+    <div class="danger-row">
+      <label>Type <code>RESET</code> to confirm <input id="reset-all-confirm" autocomplete="off" spellcheck="false"></label>
+      <button id="reset-all" class="danger-button" disabled>Reset the whole lab</button>
+    </div>
+  </section>
+
+  <section class="card workstation">
+    <div class="section-head">
+      <h2>Your lab desktop</h2>
+      <span id="ws-usage" class="usage"></span>
+    </div>
+    <p class="hint">The workstation you are working in.  It is disposable, like the hosted lab: push your
+      work to the lab Git server before you run <code>hackrange-lab stop</code> or <code>hackrange-lab reset</code>
+      on your Ubuntu machine.</p>
+  </section>
+</main>
+
+<main id="login" class="login" hidden>
+  <form id="login-form" class="card login-card" autocomplete="off">
+    <img src="static/logo.png" alt="HackRange" class="login-logo">
+    <h2>Sign in to your lab</h2>
+    <label>Username <input name="username" value="student" autocomplete="username"></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" autofocus></label>
+    <p id="login-error" class="error" hidden></p>
+    <button type="submit" class="primary">Sign in</button>
+    <p class="hint">Your password is shown by <code>/opt/hackrange-labs/show_information.sh</code> on your Ubuntu machine.</p>
+  </form>
+</main>
+
+<footer class="footer container">
+  <span>To see your login again on your Ubuntu machine: <code>/opt/hackrange-labs/show_information.sh</code></span>
+  <span id="updated"></span>
+</footer>
+
+<template id="day-template">
+  <article class="card lab-day">
+    <button class="lab-head" type="button">
+      <span class="lab-num"></span>
+      <span class="lab-title"></span>
+      <span class="lab-score"></span>
+      <span class="pill lab-state"></span>
+    </button>
+    <div class="lab-body" hidden>
+      <ul class="lab-items"></ul>
+      <div class="lab-actions">
+        <button class="primary lab-check" type="button">Check my work</button>
+        <span class="hint lab-checked"></span>
+      </div>
+    </div>
+  </article>
+</template>
+
+<template id="component-template">
+  <article class="card component">
+    <div class="comp-head">
+      <div><h3 class="comp-name"></h3><span class="tag comp-week"></span></div>
+      <span class="pill comp-state"></span>
+    </div>
+    <p class="comp-desc"></p>
+    <div class="comp-usage usage"></div>
+    <div class="comp-links"></div>
+    <div class="comp-creds"></div>
+    <p class="comp-error error" hidden></p>
+    <div class="comp-actions">
+      <button class="primary comp-start">Start</button>
+      <button class="secondary comp-stop">Stop</button>
+      <button class="link-button comp-reset" hidden>Reset to default</button>
+    </div>
+  </article>
+</template>
+</body>
+</html>

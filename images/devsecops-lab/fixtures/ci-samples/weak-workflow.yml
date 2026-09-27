@@ -1,0 +1,19 @@
+# DO NOT COPY THIS WORKFLOW.  It is deliberately weak for the Day 10 lab.
+name: greet-pr
+on:
+  pull_request_target:
+    types: [opened, edited]
+permissions: write-all
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Say hello
+        run: echo "Thanks for the PR titled ${{ github.event.pull_request.title }}"
+      - name: Build it
+        run: npm install && npm test
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

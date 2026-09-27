@@ -27,7 +27,7 @@ AMD or ARM processors, including Apple Silicon Macs).  One command installs
 everything the course's labs need.
 
 **New to virtual machines or the command line?**  Read
-[**Documentation.pdf**](Documentation.pdf) first.  It walks you through every
+[**Documentation.pdf**](https://raw.githubusercontent.com/hackrange/lab_devsecops/main/Documentation.pdf) (the link downloads it) first.  It walks you through every
 step with screenshots: creating the Ubuntu virtual machine, running the
 installer, signing in to your lab, and removing it when the course ends.
 It assumes no technical background.

@@ -13,6 +13,7 @@
 # the latest version of this repository.
 #
 # Author: Tim Rice
+# tim.j.rice@hackrange.com
 
 set -Eeuo pipefail
 
